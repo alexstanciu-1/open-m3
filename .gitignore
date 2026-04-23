@@ -1,0 +1,6 @@
+_legacy_code/
+simple_cpp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
