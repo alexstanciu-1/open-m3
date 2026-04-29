@@ -1,0 +1,1 @@
+{"table":"Invoices","properties":{"Date":{"name":"Date","index":true},"Due_Date":{"name":"Due_Date","index":true},"Invoiced_To":{"name":"Invoiced_To","sql_type":"enum('channel','property_owner')"},"Notes":{"name":"Notes","sql_type":"TEXT"},"Status":{"name":"Status","sql_type":"enum('issued','generated','partially_collected','collected','canceled','outdated')"}}}

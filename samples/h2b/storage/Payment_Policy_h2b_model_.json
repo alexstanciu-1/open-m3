@@ -1,0 +1,1 @@
+{"table":"Payment_Policies","properties":{"Remote_Id":{"name":"Remote_Id","sql_type":"VARCHAR(65)","index":true},"Fee_Mode":{"name":"Fee_Mode","sql_type":"enum('per_stay','per_person')"}}}

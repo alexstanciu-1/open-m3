@@ -1,0 +1,1 @@
+{"name":"Order_Utils","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"integer"}}}

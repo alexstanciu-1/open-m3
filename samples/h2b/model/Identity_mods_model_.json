@@ -1,0 +1,1 @@
+{"name":"Identity_mods_model_","extends":"QModel","properties":{"User":{"name":"User","type.name":"User"},"Session":{"name":"Session","type.name":"Session"},"Id":{"name":"Id","type.name":"integer"}}}

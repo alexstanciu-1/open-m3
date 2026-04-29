@@ -4,3 +4,8 @@ simple_cpp/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Generated build/cache outputs
+**/.prism/
+**/.ninja*
+**/.asan*/

@@ -1,0 +1,1 @@
+{"table":"Age_Intervals","properties":{"Name":{"name":"Name","sql_type":"enum('infant','toddler','child','adolescent','adult')"}}}

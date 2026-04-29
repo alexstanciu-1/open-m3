@@ -1,0 +1,1 @@
+{"table":"Room_Occupancies","properties":{"Remote_Id":{"name":"Remote_Id","sql_type":"VARCHAR(65)","index":true},"Rooms":{"name":"Rooms","relation.type":"oneToMany","relation.target_column":"Occupancy"},"Beds_Setup":{"name":"Beds_Setup","relation.type":"oneToMany","relation.target_column":"Occupancy"}}}

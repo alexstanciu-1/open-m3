@@ -1,0 +1,1 @@
+{"name":"Rate_Plan_Room_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Room":{"name":"Room","type.name":"TFH/Property_Room"},"Rate_Plan":{"name":"Rate_Plan","type.name":"TFH/Rate_Plan"},"Index":{"name":"Index","type.name":"int"}}}

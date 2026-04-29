@@ -1,0 +1,1 @@
+{"table":"Price_Profile","properties":{"Items":{"name":"Items","relation.type":"oneToMany","relation.target_column":"Price_Profile"},"Currency":{"name":"Currency","sql_type":"enum('RON','EUR','USD')"}}}

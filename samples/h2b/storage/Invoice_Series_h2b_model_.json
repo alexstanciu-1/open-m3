@@ -1,0 +1,1 @@
+{"table":"Invoices_Series","properties":{"First_Number":{"name":"First_Number","default":"1"},"Description":{"name":"Description","sql_type":"TEXT"}}}

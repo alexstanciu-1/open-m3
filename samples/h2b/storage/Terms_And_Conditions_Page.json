@@ -1,0 +1,1 @@
+{"table":"Terms_And_Conditions_Pages","properties":{"Active":{"name":"Active","default":"0"},"Content_HTML":{"name":"Content_HTML","sql_type":"MEDIUMTEXT"},"Is_Default":{"name":"Is_Default","default":"0"}}}
