@@ -1,0 +1,1 @@
+{"name":"QSqlTableIndex","extends":"QSqlTableIndex_frame_","properties":{"name":{"name":"name","type.name":"string"},"type":{"name":"type","type.name":"integer"},"columns":{"name":"columns","type.name":"QSqlTableColumn","type.list":true},"table":{"name":"table","type.name":"QSqlTable"},"Id":{"name":"Id","type.name":"integer"}}}

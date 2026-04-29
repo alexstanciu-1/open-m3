@@ -1,0 +1,1 @@
+{"name":"Date_Room_Rate_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Rate":{"name":"Rate","type.name":"TFH/Rate_Plan"},"Price":{"name":"Price","type.name":"float"},"Restrictions":{"name":"Restrictions","type.name":"TFH/Restrictions"}}}

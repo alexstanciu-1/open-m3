@@ -1,0 +1,1 @@
+{"table":"Key_Value","properties":{"Key":{"name":"Key","index":true},"Value":{"name":"Value","sql_type":"VARCHAR(1000)"},"Value_Text":{"name":"Value_Text","sql_type":"TEXT"}}}

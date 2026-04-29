@@ -1,0 +1,1 @@
+{"name":"Rate_Plan_Extra_Service","properties":{"Id":{"name":"Id","type.name":"int"},"Remote_Id":{"name":"Remote_Id","type.name":"string"},"Offer":{"name":"Offer","type.name":"Comm/Offer","struct.ref":"Offers"},"Quantity":{"name":"Quantity","type.name":"int"}}}

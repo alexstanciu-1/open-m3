@@ -1,0 +1,1 @@
+{"name":"QStorageFolder","extends":"QStorageFolder_frame_","properties":{"children":{"name":"children","type.name":"QIStorageEntry","type.list":true},"name":{"name":"name","type.name":"string"},"parent":{"name":"parent","type.name":"QStorageFolder"},"storage":{"name":"storage","type.name":"QIStorage"},"Id":{"name":"Id","type.name":"integer"}}}

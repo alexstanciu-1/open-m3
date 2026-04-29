@@ -1,0 +1,1 @@
+{"name":"Rate_Plan_Access","properties":{"Id":{"name":"Id","type.name":"int"},"Rate":{"name":"Rate","type.name":"TFH/Rate_Plan"},"Property":{"name":"Property","type.name":"TFH/Property"},"Channel":{"name":"Channel","type.name":"Comm/Company"},"Enabled":{"name":"Enabled","type.name":"boolean"},"Enable_All_Channels":{"name":"Enable_All_Channels","type.name":"boolean"}}}

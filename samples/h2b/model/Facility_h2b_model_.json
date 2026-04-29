@@ -1,0 +1,1 @@
+{"name":"Facility_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Tag":{"name":"Tag","type.name":"string"},"Icon":{"name":"Icon","type.name":"string"}}}

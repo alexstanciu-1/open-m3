@@ -1,0 +1,1 @@
+{"name":"Actor_mods_model_","extends":"QModel","properties":{"Name":{"name":"Name","type.name":"string","required":true},"Email":{"name":"Email","type.name":"string"},"Phone":{"name":"Phone","type.name":"string"},"Address":{"name":"Address","type.name":"Address"},"Addresses":{"name":"Addresses","type.name":"Address","type.list":true},"Id":{"name":"Id","type.name":"integer"}}}

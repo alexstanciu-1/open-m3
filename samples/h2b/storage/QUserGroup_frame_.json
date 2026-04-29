@@ -1,0 +1,1 @@
+{"table":"$UserGroups","properties":{"Users":{"name":"Users","relation.type":"manyToMany","relation.table":"$UsersGroupsList","relation.this_column":"Group","relation.target_column":"User"}}}
