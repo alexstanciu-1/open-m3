@@ -1,0 +1,313 @@
+<?php
+declare(strict_types=1);
+
+const DEBUG = false;
+
+const TYPES_JSON_DIR = "../../../open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+const SAMPLES_ROOT_DIR = "../../samples/h2b";
+const MODEL_OUT_DIR = SAMPLES_ROOT_DIR . "/model";
+const STORAGE_OUT_DIR = SAMPLES_ROOT_DIR . "/storage";
+const REPORT_OUT_DIR = SAMPLES_ROOT_DIR . "/report";
+
+function normalize_type_path(mixed $legacy_type_name): string
+{
+	$type_path = str_replace("\\", "/", $legacy_type_name);
+	if (substr($type_path, 0, 4) == "Omi/") {
+		$type_path = substr($type_path, 4);
+	}
+	return $type_path;
+}
+
+function has_value(mixed $value): bool
+{
+	return ($value !== null) && ($value !== false) && ($value !== "");
+}
+
+function legacy_types_info(mixed $legacy_types): mixed
+{
+	$info = [
+		"type_name" => null,
+		"is_list" => false,
+	];
+
+	if ($legacy_types === null) {
+		return $info;
+	}
+
+	if ($legacy_types["type"] == "QModelArray") {
+		foreach ($legacy_types["options"] as $type_key => $type_name) {
+			$info["type_name"] = normalize_type_path($type_name);
+			$info["is_list"] = true;
+			break;
+		}
+		return $info;
+	}
+
+	if ($legacy_types[0] !== null) {
+		foreach ($legacy_types as $type_name) {
+			$info["type_name"] = normalize_type_path($type_name);
+			break;
+		}
+		return $info;
+	}
+
+	$info["type_name"] = normalize_type_path($legacy_types);
+	return $info;
+}
+
+function convert_property_to_om3(mixed $legacy_property): mixed
+{
+	$om3 = [
+		"name" => $legacy_property["name"],
+	];
+
+	$type_info = legacy_types_info($legacy_property["types"]);
+	if (has_value($type_info["type_name"])) {
+		$om3["type.name"] = $type_info["type_name"];
+	}
+	if ($type_info["is_list"] === true) {
+		$om3["type.list"] = true;
+	}
+
+	if ($legacy_property["validation"] == "mandatory") {
+		$om3["required"] = true;
+	}
+
+	if (has_value($legacy_property["storage"]["optionsPool"])) {
+		$om3["struct.ref"] = $legacy_property["storage"]["optionsPool"];
+	}
+
+	return $om3;
+}
+
+function convert_all_properties_to_om3(mixed $legacy_properties): mixed
+{
+	$om3_properties = [];
+
+	foreach ($legacy_properties as $property_name => $legacy_property) {
+		$om3_properties[$property_name] = convert_property_to_om3($legacy_property);
+	}
+
+	return $om3_properties;
+}
+
+function convert_model_to_om3(mixed $legacy_type): mixed
+{
+	$om3 = [
+		"name" => normalize_type_path($legacy_type["class"]),
+		"properties" => [],
+	];
+
+	if (has_value($legacy_type["parent"])) {
+		$om3["extends"] = normalize_type_path($legacy_type["parent"]);
+	}
+
+	if (has_value($legacy_type["model"]["abstract"])) {
+		$om3["abstract"] = (bool) $legacy_type["model"]["abstract"];
+	}
+
+	if ($legacy_type["properties"] !== null) {
+		$om3["properties"] = convert_all_properties_to_om3($legacy_type["properties"]);
+	}
+
+	return $om3;
+}
+
+function convert_storage_to_om3(mixed $legacy_type): mixed
+{
+	$om3 = [];
+
+	if (has_value($legacy_type["storage"]["table"])) {
+		$om3["table"] = $legacy_type["storage"]["table"];
+	}
+	if (has_value($legacy_type["storage"]["database"])) {
+		$om3["database"] = $legacy_type["storage"]["database"];
+	}
+	if (has_value($legacy_type["storage"]["typeColumn"])) {
+		$om3["type_column"] = $legacy_type["storage"]["typeColumn"];
+	}
+
+	$properties = [];
+	if ($legacy_type["properties"] !== null) {
+		foreach ($legacy_type["properties"] as $property_name => $legacy_property) {
+			$storage_property = [];
+
+			if (has_value($legacy_property["storage"]["column"])) {
+				$storage_property["column"] = $legacy_property["storage"]["column"];
+			}
+			if (has_value($legacy_property["storage"]["type"])) {
+				$storage_property["sql_type"] = $legacy_property["storage"]["type"];
+			}
+			if (isset($legacy_property["storage"]["null"])) {
+				$storage_property["nullable"] = (bool) $legacy_property["storage"]["null"];
+			}
+
+			if (count($storage_property) > 0) {
+				$properties[$property_name] = $storage_property;
+			}
+		}
+	}
+
+	if (count($properties) > 0) {
+		$om3["properties"] = $properties;
+	}
+
+	return $om3;
+}
+
+function legacy_file_to_model_output_name(string $type_file): string
+{
+	return substr($type_file, 0, -5);
+}
+
+function ensure_dir(string $path): bool
+{
+	return fs_exists($path) ? fs_is_dir($path) : fs_mkdir($path);
+}
+
+function ensure_parent_dir(string $path): bool
+{
+	$parent = fs_dirname($path);
+	return ensure_dir($parent);
+}
+
+function write_json_file(string $path, mixed $payload): bool
+{
+	$json = json_encode($payload);
+	if ($json === null) {
+		return false;
+	}
+
+	$written /** int */ = 0;
+	$err /** error_t */;
+	return take($written, $err, fs_put($path, $json . "\n"));
+}
+
+function collect_unmapped_type_metadata(mixed $legacy_type): mixed
+{
+	$report = [];
+
+	if (has_value($legacy_type["cfg"])) {
+		$report["cfg"] = $legacy_type["cfg"];
+	}
+	if (has_value($legacy_type["api"])) {
+		$report["api"] = $legacy_type["api"];
+	}
+
+	$property_report = [];
+	if ($legacy_type["properties"] !== null) {
+		foreach ($legacy_type["properties"] as $property_name => $legacy_property) {
+			$unmapped = [];
+
+			foreach (["cfg", "api", "security", "display", "filter", "fixValue", "default"] as $key) {
+				if (has_value($legacy_property[$key])) {
+					$unmapped[$key] = $legacy_property[$key];
+				}
+			}
+			if (has_value($legacy_property["storage"])) {
+				$storage_unmapped = [];
+				foreach ($legacy_property["storage"] as $key => $value) {
+					if (
+						($key != "column") &&
+						($key != "type") &&
+						($key != "null") &&
+						($key != "optionsPool") &&
+						has_value($value)
+					) {
+						$storage_unmapped[$key] = $value;
+					}
+				}
+				if (count($storage_unmapped) > 0) {
+					$unmapped["storage"] = $storage_unmapped;
+				}
+			}
+
+			if (count($unmapped) > 0) {
+				$property_report[$property_name] = $unmapped;
+			}
+		}
+	}
+
+	if (count($property_report) > 0) {
+		$report["properties"] = $property_report;
+	}
+
+	return $report;
+}
+
+$scanned /** vector<string> */ = [];
+$scan_err /** error_t */;
+if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
+	echo "failed to scan input directory\n";
+} else {
+	$dirs_ready =
+		ensure_dir("../../samples") &&
+		ensure_dir(SAMPLES_ROOT_DIR) &&
+		ensure_dir(MODEL_OUT_DIR) &&
+		ensure_dir(STORAGE_OUT_DIR) &&
+		ensure_dir(REPORT_OUT_DIR);
+
+	$converted = [];
+	$failed = [];
+	$unmapped_report = [];
+
+	if (!$dirs_ready) {
+		echo "failed to prepare output directories\n";
+	} else {
+		foreach ($scanned as $type_file) {
+			if (!str_ends_with($type_file, ".json")) {
+				continue;
+			}
+
+			if (DEBUG) {
+				echo "converting ";
+				echo $type_file;
+				echo "\n";
+			}
+
+			$json_path = TYPES_JSON_DIR . "/" . $type_file;
+			$json /** string */ = "";
+			$read_err /** error_t */;
+			if (!take($json, $read_err, fs_get($json_path))) {
+				$failed[] = $type_file;
+				continue;
+			}
+
+			$data = json_decode($json);
+			if ($data === null) {
+				$failed[] = $type_file;
+				continue;
+			}
+
+			$model_om3 = convert_model_to_om3($data);
+			$storage_om3 = convert_storage_to_om3($data);
+			$output_name = legacy_file_to_model_output_name($type_file);
+			$model_out_path = MODEL_OUT_DIR . "/" . $output_name . ".json";
+			$storage_out_path = STORAGE_OUT_DIR . "/" . $output_name . ".json";
+
+			$model_parent_ready = ensure_parent_dir($model_out_path);
+			$storage_parent_ready = ensure_parent_dir($storage_out_path);
+			$model_written = $model_parent_ready && write_json_file($model_out_path, $model_om3);
+			$storage_written = $storage_parent_ready && write_json_file($storage_out_path, $storage_om3);
+
+			if ($model_written && $storage_written) {
+				$converted[] = $output_name;
+				$unmapped_report[$output_name] = collect_unmapped_type_metadata($data);
+			} else {
+				$failed[] = $type_file;
+			}
+		}
+
+		write_json_file(REPORT_OUT_DIR . "/unmapped.json", $unmapped_report);
+
+		echo "converted ";
+		echo count($converted);
+		echo " types";
+		if (count($failed) > 0) {
+			echo ", failed ";
+			echo count($failed);
+			echo " types";
+		}
+		echo "\n";
+	}
+}

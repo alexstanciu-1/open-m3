@@ -34,6 +34,11 @@ Local Simple C++ repos:
 - `D:\Work_2026\open_m3\simple_cpp`
 - `C:\scpp`
 
+Current WSL-side reference roots:
+
+- `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp`
+- `/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code`
+
 These two repos were kept in sync with `origin/main` after each merged hotfix during this chat.
 
 ## Open M3 Direction Agreed So Far
@@ -41,6 +46,10 @@ These two repos were kept in sync with `origin/main` after each merged hotfix du
 ### Major Roadmap
 
 Open M3 must be able to co-work with legacy projects.
+
+Open M3 should also remain a strict-mode project with its own library surface.
+
+This means Simple C++ updates should be consumed for correctness and ergonomics, but Open M3 should not accidentally let default compatibility-surface conventions define its long-term authored shape.
 
 First major objective:
 

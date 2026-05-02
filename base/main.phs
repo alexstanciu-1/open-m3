@@ -1,0 +1,44 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\app;
+
+$model_path = "../samples/h2b/model/Property.json";
+$storage_path = "../samples/h2b/storage/Property.json";
+
+$model_json /** string */ = "";
+$storage_json /** string */ = "";
+$err /** error_t */;
+
+$m = null;
+$s = null;
+
+if (take($model_json, $err, fs_get($model_path))) {
+	$m = json_decode($model_json);
+}
+if (take($storage_json, $err, fs_get($storage_path))) {
+	$s = json_decode($storage_json);
+}
+
+if (($m === null) || ($s === null)) {
+	echo "load_failed\n";
+} else {
+	$property_count = count($m["properties"]);
+	$storage_property_count = count($s["properties"]);
+	$first_property_name = "";
+	foreach ($m["properties"] as $property_name => $property_data) {
+		if (isset($property_data["name"])) {
+			$first_property_name = $property_data["name"];
+		} else {
+			$first_property_name = $property_name;
+		}
+		break;
+	}
+	$has_attached_storage = isset($s["table"]) ? "yes" : "no";
+
+	echo $m["name"], "\n";
+	echo $property_count, "\n";
+	echo $storage_property_count, "\n";
+	echo $first_property_name, "\n";
+	echo $has_attached_storage, "\n";
+}

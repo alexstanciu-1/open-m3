@@ -1,0 +1,1 @@
+{"table":"Rooms_Occupancy_Beds_Setup","properties":{"Index":{"sql_type":"SMALLINT"},"Tag":{"sql_type":"VARCHAR(64)"},"Type":{"sql_type":"enum('no_bed','regular_bed','extra_bed')"},"Seats":{"sql_type":"SMALLINT"},"Age_Intervals":{"sql_type":"enum('infant','toddler','child','adolescent','adult')"}}}

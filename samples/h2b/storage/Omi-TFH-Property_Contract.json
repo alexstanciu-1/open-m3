@@ -1,0 +1,1 @@
+{"table":"Property_Contracts","properties":{"Contract_Upload_IP":{"sql_type":"VARCHAR(32)"},"Agreement_Type":{"sql_type":"enum('required_signed_contract','contract_terms_acceptance')"}}}

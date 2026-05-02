@@ -1,0 +1,13 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\schema;
+
+class model
+{
+	public ?string $name = null;
+	public ?string $extends = null;
+	public bool $abstract = false;
+	public mixed $properties = null;
+	public mixed $attached_storage = null;
+}

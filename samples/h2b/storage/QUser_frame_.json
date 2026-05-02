@@ -1,1 +1,1 @@
-{"table":"$Users","properties":{"Username":{"name":"Username","index":"unique"},"Email":{"name":"Email","index":"unique"},"Groups":{"name":"Groups","relation.type":"manyToMany","relation.table":"$UsersGroupsList","relation.this_column":"User","relation.target_column":"Group"}}}
+{"table":"$Users"}

@@ -14,6 +14,11 @@ Use `scpp init` in a simple staged way:
 
 The main objective is to keep each Simple C++ unit small, understandable, and independently runnable while the architecture settles.
 
+Important constraint:
+
+- Open M3 is intended to live in strict mode with its own library surface
+- therefore `scpp init` usage here should be treated as toolchain/project scaffolding support, not as a decision that Open M3 authored code must follow the default Simple C++ compatibility-first frontend conventions
+
 ## Guiding Idea
 
 We should not start with one giant Simple C++ project.
@@ -132,3 +137,5 @@ The intended dependency direction should be:
 At this stage, `scpp init` should help us keep boundaries clear.
 
 It should not push us into a monolithic repository-wide project too early.
+
+It also should not quietly lock Open M3 into whichever frontend naming or extension convention the default Simple C++ surface currently prefers.

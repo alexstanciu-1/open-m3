@@ -1,0 +1,1 @@
+{"name":"Comm/Bank_Account","properties":{"Use_On_Invoice":{"name":"Use_On_Invoice","type.name":"boolean"},"Id":{"name":"Id","type.name":"int"},"Bank_Name":{"name":"Bank_Name","type.name":"string"},"IBAN":{"name":"IBAN","type.name":"string"},"Currency":{"name":"Currency","type.name":"string"}},"extends":"Comm/Bank_Account_h2b_model_"}

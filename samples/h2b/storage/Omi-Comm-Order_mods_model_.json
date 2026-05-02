@@ -1,0 +1,1 @@
+{"table":"Orders","properties":{"Status":{"sql_type":"enum('Proposal','Submitted','Confirmed','Cancelled','Error')"},"Notes":{"sql_type":"TEXT"}}}

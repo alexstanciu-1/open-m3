@@ -1,0 +1,1 @@
+{"name":"TFH/BNR_Rate","properties":{"From_Currency":{"name":"From_Currency","type.name":"string"},"To_Currency":{"name":"To_Currency","type.name":"string"},"Rate":{"name":"Rate","type.name":"float"},"Date":{"name":"Date","type.name":"datetime"},"Id":{"name":"Id","type.name":"integer"}},"extends":"TFH/BNR_Rate_h2b_model_"}

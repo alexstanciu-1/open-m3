@@ -1,0 +1,1 @@
+{"name":"TFH/Search_Room","properties":{"Id":{"name":"Id","type.name":"int"},"Adults":{"name":"Adults","type.name":"int"},"Children":{"name":"Children","type.name":"int"},"Infants":{"name":"Infants","type.name":"int"},"Children_Ages":{"name":"Children_Ages","type.name":"string"},"Count":{"name":"Count","type.name":"int"}},"extends":"TFH/Search_Room_h2b_model_"}

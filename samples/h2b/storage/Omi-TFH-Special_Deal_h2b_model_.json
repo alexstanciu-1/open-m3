@@ -1,0 +1,1 @@
+{"table":"Special_Deals","properties":{"Type":{"sql_type":"enum('special_offer','early_booking','last_minute')"}}}

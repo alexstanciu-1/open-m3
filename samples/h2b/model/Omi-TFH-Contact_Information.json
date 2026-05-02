@@ -1,0 +1,1 @@
+{"name":"TFH/Contact_Information","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Department":{"name":"Department","type.name":"string"},"IsDefault":{"name":"IsDefault","type.name":"boolean"}},"extends":"TFH/Contact_Information_h2b_model_"}

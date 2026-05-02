@@ -24,8 +24,8 @@ This keeps the project readable while allowing the runtime to grow gradually.
 | `tools/` | Small utilities, converters, generators, probes, and one-off migration tools. |
 | `samples/` | Generated examples, reference outputs, and comparison artifacts used to validate the design. |
 | `modules/` | Runtime modules that implement Open M3 capabilities in reusable compiled form. |
-| `_legacy_code/` | Legacy projects and framework code kept for study, conversion, and compatibility work. |
-| `simple_cpp/` | The local Simple C++ compiler/runtime repo used to build Open M3 code. |
+| `_legacy_code/` | Legacy projects and framework code kept for study, conversion, and compatibility work. This may live outside the tracked repo when needed. |
+| `simple_cpp/` | A local Simple C++ compiler/runtime checkout used to build Open M3 code. It may be kept adjacent to the repo instead of committed inside it. |
 
 ## Current Direction For Modules
 
@@ -72,6 +72,11 @@ The important point is that `modules/orm/` should stay a module, not become a ca
 ## Current Working View
 
 The current repository is not yet fully structured as a final platform.
+
+At the moment, some important reference material is intentionally external to this tracked repo:
+
+- legacy reference root: `/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code`
+- local Simple C++ checkout: `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp`
 
 At this stage:
 

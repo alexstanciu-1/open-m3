@@ -42,6 +42,21 @@ Open M3 should be able to:
 | orm | The ORM must be capable enough to co-work with existing schemas and relation patterns. |
 | compatibility | Compatibility with real legacy databases matters more than theoretical elegance alone. |
 
+## Toolchain Direction
+
+Open M3 should be treated as a strict-mode project.
+
+That means:
+
+- Open M3 authored semantics must be defined by the Open M3 strict library surface
+- Open M3 must not silently inherit loose or compatibility-first frontend conventions from the default Simple C++ surface
+- Simple C++ release updates are important for compiler, generator, and runtime correctness, but they do not by themselves define Open M3 language shape
+
+Practical implication:
+
+- use newer Simple C++ runtime/generator fixes when they help Open M3
+- keep Open M3 strict-mode decisions explicit inside Open M3 specs and library design
+
 ## Current Working Success Condition
 
 Open M3 can define a model, materialize it through the ORM, and correctly read and write against a legacy project database while co-existing with the legacy application.

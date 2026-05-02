@@ -1,0 +1,1 @@
+{"table":"Rate_Set_Requests","properties":{"Weekdays":{"sql_type":"set('Mon','Tue','Wed','Thu','Fri','Sat','Sun')"},"Rooms_Status":{"sql_type":"enum('nochange','open','closed','cancel')"},"Rate_Status":{"sql_type":"enum('nochange','open','closed','cancel')"}}}
