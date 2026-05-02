@@ -1,1 +1,1 @@
-{"name":"QFile","extends":"QFile_frame_","properties":{"Path":{"name":"Path","type.name":"file"},"Id":{"name":"Id","type.name":"integer"}}}
+{"name":"QFile","properties":{"Path":{"name":"Path","type.name":"file"},"Id":{"name":"Id","type.name":"integer"}},"extends":"QFile_frame_"}

@@ -1,0 +1,1 @@
+{"table":"$Users","properties":{"Type":{"sql_type":"enum('H2B_Superadmin','H2B_Channel','H2B_Property','H2B_Customer')"},"Access_Level":{"sql_type":"enum('Basic','Admin')"},"H2B_Channel_Type":{"sql_type":"enum('Agent','Administrator')"}}}

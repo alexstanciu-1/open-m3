@@ -1,0 +1,1 @@
+{"name":"Comm/Content","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"ShortDescription":{"name":"ShortDescription","type.name":"string"},"Text_HTML":{"name":"Text_HTML","type.name":"string"}},"extends":"Comm/Content_mods_model_"}

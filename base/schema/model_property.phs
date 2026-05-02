@@ -1,0 +1,17 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\schema;
+
+class model_property
+{
+	public ?string $name = null;
+	public ?string $type_name = null;
+	public bool $type_list = false;
+	public bool $required = false;
+	public mixed $default = null;
+	public ?string $struct_ref = null;
+	public bool $struct_sub = false;
+	public bool $struct_weakref = false;
+	public mixed $attached_storage = null;
+}

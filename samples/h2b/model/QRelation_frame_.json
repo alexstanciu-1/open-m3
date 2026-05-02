@@ -1,1 +1,1 @@
-{"name":"QRelation_frame_","extends":"QModel","properties":{"Name":{"name":"Name","type.name":"string"},"Subject":{"name":"Subject","type.name":"QUserGroup"},"Groups":{"name":"Groups","type.name":"QUserGroup","type.list":true},"Id":{"name":"Id","type.name":"integer"}}}
+{"name":"QRelation_frame_","properties":{"Name":{"name":"Name","type.name":"string"},"Subject":{"name":"Subject","type.name":"QUserGroup"},"Groups":{"name":"Groups","type.name":"QUserGroup","type.list":true},"Id":{"name":"Id","type.name":"integer"}},"extends":"QModel"}

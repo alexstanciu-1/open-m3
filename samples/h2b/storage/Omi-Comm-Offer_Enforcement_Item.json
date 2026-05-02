@@ -1,0 +1,1 @@
+{"table":"Offer_Enforcement_Items","properties":{"Action":{"sql_type":"enum('mandatory','incompatible','discount','set_price')"}}}

@@ -1,0 +1,16 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\schema;
+
+class storage
+{
+	public ?string $table = null;
+	public ?string $engine = null;
+	public ?string $database = null;
+	public mixed $primary_key = null;
+	public ?string $type_column = null;
+	public mixed $indexes = null;
+	public mixed $owner_model = null;
+	public mixed $properties = null;
+}

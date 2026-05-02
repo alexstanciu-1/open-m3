@@ -1,0 +1,1 @@
+{"name":"Country_mods_model_","properties":{"Id":{"name":"Id","type.name":"string"},"Name":{"name":"Name","type.name":"string"},"Code":{"name":"Code","type.name":"string"},"Place_Id":{"name":"Place_Id","type.name":"string"},"Place_Mtime":{"name":"Place_Mtime","type.name":"datetime"}},"extends":"QModel"}

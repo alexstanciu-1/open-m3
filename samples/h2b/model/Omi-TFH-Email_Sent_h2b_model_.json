@@ -1,0 +1,1 @@
+{"name":"TFH/Email_Sent_h2b_model_","properties":{"Subject":{"name":"Subject","type.name":"string"},"Body":{"name":"Body","type.name":"string"},"From":{"name":"From","type.name":"string"},"To":{"name":"To","type.name":"string"},"Date":{"name":"Date","type.name":"datetime"},"Id":{"name":"Id","type.name":"integer"}},"extends":"QModel"}

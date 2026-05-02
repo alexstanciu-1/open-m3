@@ -1,0 +1,1 @@
+{"name":"Identity","properties":{"User":{"name":"User","type.name":"User"},"Session":{"name":"Session","type.name":"Session"},"Id":{"name":"Id","type.name":"integer"}},"extends":"Identity_mods_model_"}

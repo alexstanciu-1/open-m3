@@ -1,1 +1,1 @@
-{"name":"QStorage_frame_","extends":"QStorageEntry","properties":{"name":{"name":"name","type.name":"string"},"parent":{"name":"parent","type.name":"QStorageFolder"},"storage":{"name":"storage","type.name":"QIStorage"},"Id":{"name":"Id","type.name":"integer"}}}
+{"name":"QStorage_frame_","properties":{"name":{"name":"name","type.name":"string"},"parent":{"name":"parent","type.name":"QStorageFolder"},"storage":{"name":"storage","type.name":"QIStorage"},"Id":{"name":"Id","type.name":"integer"}},"extends":"QStorageEntry"}

@@ -1,0 +1,17 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\load;
+
+class json_loader
+{
+	public static function load_json_file(string $path): mixed
+	{
+		$json /** string */ = "";
+		$err /** error_t */;
+		if (!take($json, $err, fs_get($path))) {
+			return null;
+		}
+		return json_decode($json);
+	}
+}
