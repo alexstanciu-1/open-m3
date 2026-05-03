@@ -11,6 +11,7 @@ class storage
 	public mixed $primary_key = null;
 	public ?string $type_column = null;
 	public mixed $indexes = null;
-	public mixed $owner_model = null;
-	public mixed $properties = null;
+	public int $property_count = 0;
+	public ?model $owner_model = null;
+	public $properties /** vector<storage_property> */ = [];
 }

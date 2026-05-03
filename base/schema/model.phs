@@ -8,6 +8,7 @@ class model
 	public ?string $name = null;
 	public ?string $extends = null;
 	public bool $abstract = false;
-	public mixed $properties = null;
-	public mixed $attached_storage = null;
+	public int $property_count = 0;
+	public $properties /** vector<model_property> */ = [];
+	public ?storage $attached_storage = null;
 }
