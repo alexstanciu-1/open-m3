@@ -8,6 +8,8 @@ Purpose: record how Open M3 should consume Simple C++ changes without losing its
 
 Open M3 currently depends on a local Simple C++ checkout for compilation and runtime behavior.
 
+For PHP++ / PHS authoring decisions, the upstream quick-learn at `simple_cpp/specs/simple_cpp_php_strict_quick_learn.md` should be treated as a mandatory read.
+
 Important local reference paths:
 
 - Simple C++ checkout: `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp`
@@ -30,7 +32,7 @@ Relevant release notes between the older local state and `v0.1.6` include:
 - by-reference `foreach` support on the shared runtime path
 - same-namespace forward declaration cycle fixes
 - CLI entrypoint helper fixes for `$argc`, `$argv`, `cli_argc()`, and `cli_argv()`
-- canonical `.phs` frontend handling under the default `PHP++` surface while keeping `.php` compatibility
+- canonical `.phs` frontend handling in the current upstream default frontend surface while keeping `.php` compatibility
 
 ## Open M3 Rule
 
@@ -39,8 +41,9 @@ Open M3 must remain a strict-mode project with its own library surface.
 Therefore:
 
 - compiler/runtime correctness fixes from Simple C++ should be adopted when useful
-- Open M3 should not automatically adopt default frontend branding, naming, or extension choices just because they became canonical upstream
+- Open M3 should not automatically adopt upstream frontend branding, naming, or extension choices just because they became canonical upstream
 - the Open M3 authored surface should be decided by Open M3 strict-mode needs first
+- any eventual replacement for upstream-facing labels or branding should be handled as a separate naming discussion
 
 ## Immediate Guidance
 
