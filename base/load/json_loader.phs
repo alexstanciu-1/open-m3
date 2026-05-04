@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+require_once "schema/model.hpp";
+require_once "schema/model_property.hpp";
+require_once "schema/storage.hpp";
+require_once "schema/storage_property.hpp";
+
 namespace om3\base\load;
 
 class json_loader
@@ -13,5 +18,173 @@ class json_loader
 			return null;
 		}
 		return json_decode($json);
+	}
+
+	public static function load_model(string $path): ?\om3\base\schema\model
+	{
+		$data = self::load_json_file($path);
+		if ($data === null) {
+			return null;
+		}
+
+		$out = new \om3\base\schema\model();
+		if (isset($data["name"])) {
+			$out->name = (string) $data["name"];
+		}
+		if (isset($data["extends"])) {
+			$out->extends = (string) $data["extends"];
+		}
+		if (isset($data["abstract"])) {
+			$out->abstract = (bool) $data["abstract"];
+		}
+
+		if (isset($data["properties"])) {
+			foreach ($data["properties"] as $property_name => $property_data) {
+				$out->properties[] = self::load_model_property($property_name, $property_data);
+				$out->property_count = $out->property_count + 1;
+			}
+		}
+
+		return $out;
+	}
+
+	public static function load_storage(string $path): ?\om3\base\schema\storage
+	{
+		$data = self::load_json_file($path);
+		if ($data === null) {
+			return null;
+		}
+
+		$out = new \om3\base\schema\storage();
+		if (isset($data["table"])) {
+			$out->table = (string) $data["table"];
+		}
+		if (isset($data["engine"])) {
+			$out->engine = (string) $data["engine"];
+		}
+		if (isset($data["database"])) {
+			$out->database = (string) $data["database"];
+		}
+		if (isset($data["primary_key"])) {
+			$out->primary_key = $data["primary_key"];
+		}
+		if (isset($data["type_column"])) {
+			$out->type_column = (string) $data["type_column"];
+		}
+
+		if (isset($data["properties"])) {
+			foreach ($data["properties"] as $property_name => $property_data) {
+				$out->properties[] = self::load_storage_property($property_name, $property_data);
+				$out->property_count = $out->property_count + 1;
+			}
+		}
+
+		return $out;
+	}
+
+	public static function attach_storage(\om3\base\schema\model $model_def, \om3\base\schema\storage $storage_def): void
+	{
+		$model_def->attached_storage = $storage_def;
+		$storage_def->owner_model = $model_def;
+
+		for ($i = 0; $i < $model_def->property_count; $i++) {
+			$model_property_def = $model_def->properties[$i];
+			$storage_property_def = self::find_storage_property($storage_def, $model_property_def->name);
+			if ($storage_property_def !== null) {
+				$model_property_def->attached_storage = $storage_property_def;
+				$storage_property_def->owner_property = $model_property_def;
+			}
+		}
+	}
+
+	private static function load_model_property(mixed $property_name, mixed $property_data): \om3\base\schema\model_property
+	{
+		$out = new \om3\base\schema\model_property();
+		$out->name = (string) $property_name;
+
+		if (isset($property_data["name"])) {
+			$out->name = (string) $property_data["name"];
+		}
+		if (isset($property_data["type.name"])) {
+			$out->type_name = (string) $property_data["type.name"];
+		}
+		if (isset($property_data["type.list"])) {
+			$out->type_list = (bool) $property_data["type.list"];
+		}
+		if (isset($property_data["required"])) {
+			$out->required = (bool) $property_data["required"];
+		}
+		if (isset($property_data["default"])) {
+			$out->default = $property_data["default"];
+		}
+		if (isset($property_data["struct.ref"])) {
+			$out->struct_ref = (string) $property_data["struct.ref"];
+		}
+		if (isset($property_data["struct.sub"])) {
+			$out->struct_sub = (bool) $property_data["struct.sub"];
+		}
+		if (isset($property_data["struct.weakref"])) {
+			$out->struct_weakref = (bool) $property_data["struct.weakref"];
+		}
+
+		return $out;
+	}
+
+	private static function load_storage_property(mixed $property_name, mixed $property_data): \om3\base\schema\storage_property
+	{
+		$out = new \om3\base\schema\storage_property();
+		if (isset($property_data["name"])) {
+			$out->column = (string) $property_data["name"];
+		} else {
+			$out->column = (string) $property_name;
+		}
+
+		if (isset($property_data["kind"])) {
+			$out->kind = (string) $property_data["kind"];
+		}
+		if (isset($property_data["column"])) {
+			$out->column = (string) $property_data["column"];
+		}
+		if (isset($property_data["sql_type"])) {
+			$out->sql_type = (string) $property_data["sql_type"];
+		}
+		if (isset($property_data["nullable"])) {
+			$out->is_nullable = (bool) $property_data["nullable"];
+		}
+		if (isset($property_data["default"])) {
+			$out->default = $property_data["default"];
+		}
+		if (isset($property_data["index"])) {
+			$out->index = $property_data["index"];
+		}
+		if (isset($property_data["relation.type"])) {
+			$out->relation_type = (string) $property_data["relation.type"];
+		}
+		if (isset($property_data["relation.table"])) {
+			$out->relation_table = (string) $property_data["relation.table"];
+		}
+		if (isset($property_data["relation.this_column"])) {
+			$out->relation_this_column = (string) $property_data["relation.this_column"];
+		}
+		if (isset($property_data["relation.target_column"])) {
+			$out->relation_target_column = (string) $property_data["relation.target_column"];
+		}
+
+		return $out;
+	}
+
+	private static function find_storage_property(\om3\base\schema\storage $storage_def, ?string $property_name): ?\om3\base\schema\storage_property
+	{
+		if ($property_name === null || $property_name === "") {
+			return null;
+		}
+		for ($i = 0; $i < $storage_def->property_count; $i++) {
+			$property = $storage_def->properties[$i];
+			if ($property->column == $property_name) {
+				return $property;
+			}
+		}
+
+		return null;
 	}
 }

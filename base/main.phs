@@ -1,44 +1,39 @@
 <?php
 declare(strict_types=1);
 
+require_once "load/json_loader.hpp";
+
 namespace om3\base\app;
 
 $model_path = "../samples/h2b/model/Property.json";
 $storage_path = "../samples/h2b/storage/Property.json";
 
-$model_json /** string */ = "";
-$storage_json /** string */ = "";
-$err /** error_t */;
+$m = \om3\base\load\json_loader::load_model($model_path);
+$s = \om3\base\load\json_loader::load_storage($storage_path);
 
-$m = null;
-$s = null;
-
-if (take($model_json, $err, fs_get($model_path))) {
-	$m = json_decode($model_json);
-}
-if (take($storage_json, $err, fs_get($storage_path))) {
-	$s = json_decode($storage_json);
-}
-
-if (($m === null) || ($s === null)) {
+if ($m === null || $s === null) {
 	echo "load_failed\n";
 } else {
-	$property_count = count($m["properties"]);
-	$storage_property_count = count($s["properties"]);
-	$first_property_name = "";
-	foreach ($m["properties"] as $property_name => $property_data) {
-		if (isset($property_data["name"])) {
-			$first_property_name = $property_data["name"];
-		} else {
-			$first_property_name = $property_name;
-		}
-		break;
-	}
-	$has_attached_storage = isset($s["table"]) ? "yes" : "no";
+	\om3\base\load\json_loader::attach_storage($m, $s);
 
-	echo $m["name"], "\n";
+	$property_count = $m->property_count;
+	$storage_property_count = $s->property_count;
+	$first_property_name = "";
+	if ($property_count > 0) {
+		$first_property = $m->properties[0];
+		$first_property_name = $first_property->name;
+	}
+	$has_attached_storage = ($m->attached_storage !== null) ? "yes" : "no";
+	$first_attached_storage = "no";
+	if ($property_count > 0 && $m->properties[0]->attached_storage !== null) {
+		$first_attached_storage = "yes";
+	}
+
+	echo $m->name, "\n";
 	echo $property_count, "\n";
 	echo $storage_property_count, "\n";
 	echo $first_property_name, "\n";
 	echo $has_attached_storage, "\n";
+	echo $s->table, "\n";
+	echo $first_attached_storage, "\n";
 }

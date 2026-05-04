@@ -15,5 +15,5 @@ class storage_property
 	public ?string $relation_table = null;
 	public ?string $relation_this_column = null;
 	public ?string $relation_target_column = null;
-	public mixed $owner_property = null;
+	public ?model_property $owner_property = null;
 }
