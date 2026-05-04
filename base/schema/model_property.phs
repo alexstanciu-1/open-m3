@@ -13,5 +13,5 @@ class model_property
 	public ?string $struct_ref = null;
 	public bool $struct_sub = false;
 	public bool $struct_weakref = false;
-	public mixed $attached_storage = null;
+	public ?storage_property $attached_storage = null;
 }
