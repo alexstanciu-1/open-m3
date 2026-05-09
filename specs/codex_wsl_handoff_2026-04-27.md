@@ -116,7 +116,7 @@ Current intended relationships:
 
 Current JSON loader:
 
-- `D:\Work_2026\open_m3\base\load\json_loader.php`
+- `D:\Work_2026\open_m3\base\json_loader.php`
 
 It now uses normal `json_decode(...)` plus bracket access:
 
@@ -137,7 +137,7 @@ Project:
 
 It has a working `prism.json` and `main.php`.
 
-It builds and runs with the local `simple_cpp`.
+It builds and runs with `scpp`.
 
 Last observed successful output from the loader path:
 

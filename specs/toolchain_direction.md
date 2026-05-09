@@ -6,19 +6,18 @@ Purpose: record how Open M3 should consume Simple C++ changes without losing its
 
 ## Current Context
 
-Open M3 currently depends on a local Simple C++ checkout for compilation and runtime behavior.
+Open M3 currently depends on the installed default `scpp` tool for compilation and runtime behavior.
 
 For PHP++ / PHS authoring decisions, the upstream quick-learn at `simple_cpp/specs/simple_cpp_php_strict_quick_learn.md` should be treated as a mandatory read.
 
-Important local reference paths:
+Important reference paths:
 
-- Simple C++ checkout: `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp`
 - legacy reference root: `/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code`
 
-As of 2026-05-02, the locally inspected Simple C++ checkout was at:
+Operational rule:
 
-- `a8853a4`
-- described locally as `v0.1.2-15-ga8853a4`
+- use the default installed `scpp` command
+- do not rely on a repo-local Simple C++ checkout path in Open M3 docs or workflows
 
 The current upstream release page shows newer releases through:
 

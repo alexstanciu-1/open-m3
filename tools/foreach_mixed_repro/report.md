@@ -12,7 +12,7 @@ Command used:
 
 ```bash
 cd /d/Work_2026/open_m3/tools/foreach_mixed_repro
-php /d/Work_2026/open_m3/simple_cpp/bin/scpp.php run
+scpp run
 ```
 
 ## Cases

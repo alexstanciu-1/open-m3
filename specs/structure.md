@@ -25,7 +25,7 @@ This keeps the project readable while allowing the runtime to grow gradually.
 | `samples/` | Generated examples, reference outputs, and comparison artifacts used to validate the design. |
 | `modules/` | Runtime modules that implement Open M3 capabilities in reusable compiled form. |
 | `_legacy_code/` | Legacy projects and framework code kept for study, conversion, and compatibility work. This may live outside the tracked repo when needed. |
-| `simple_cpp/` | A local Simple C++ compiler/runtime checkout used to build Open M3 code. It may be kept adjacent to the repo instead of committed inside it. |
+| `simple_cpp/` | Historical reference only. Open M3 should use the default installed `scpp` command rather than depend on a repo-local Simple C++ checkout path. |
 
 ## Current Direction For Modules
 
@@ -76,7 +76,7 @@ The current repository is not yet fully structured as a final platform.
 At the moment, some important reference material is intentionally external to this tracked repo:
 
 - legacy reference root: `/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code`
-- local Simple C++ checkout: `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp`
+- Simple C++ usage: use the default installed `scpp` command
 
 At this stage:
 

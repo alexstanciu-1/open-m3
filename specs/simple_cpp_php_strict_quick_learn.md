@@ -9,7 +9,7 @@ Purpose: keep an Open M3-side pointer to the upstream Simple C++ / PHP++ quick-l
 For PHP++ / PHS authoring decisions, this is a mandatory read:
 
 - upstream repo path: `simple_cpp/specs/simple_cpp_php_strict_quick_learn.md`
-- local checkout path: `/home/alexv/__AI/open_m3/open_m3_primary/simple_cpp/specs/simple_cpp_php_strict_quick_learn.md`
+- local workflow rule: use the default installed `scpp` command rather than a repo-local Simple C++ checkout path
 - git repo: `https://github.com/alexstanciu-1/simplecpp`
 
 ## Rule

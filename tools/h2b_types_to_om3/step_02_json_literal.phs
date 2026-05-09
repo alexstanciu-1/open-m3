@@ -8,6 +8,17 @@ const SAMPLES_ROOT_DIR = "../../samples/h2b";
 const MODEL_OUT_DIR = SAMPLES_ROOT_DIR . "/model";
 const STORAGE_OUT_DIR = SAMPLES_ROOT_DIR . "/storage";
 const REPORT_OUT_DIR = SAMPLES_ROOT_DIR . "/report";
+const TYPE_BLACKLIST = [
+	"qfolderstorage" => true,
+	"qmysqlstorage" => true,
+	"qsqldatabase" => true,
+	"qsqlstorage" => true,
+	"qsqltable" => true,
+	"qstorage" => true,
+	"qstorageentry" => true,
+	"qstoragefolder" => true,
+	"qstoragetable" => true,
+];
 
 function normalize_type_path(mixed $legacy_type_name): string
 {
@@ -15,12 +26,17 @@ function normalize_type_path(mixed $legacy_type_name): string
 	if (substr($type_path, 0, 4) == "Omi/") {
 		$type_path = substr($type_path, 4);
 	}
-	return $type_path;
+	return strtolower($type_path);
 }
 
 function has_value(mixed $value): bool
 {
 	return ($value !== null) && ($value !== false) && ($value !== "");
+}
+
+function is_blacklisted_type(string $type_name): bool
+{
+	return TYPE_BLACKLIST[$type_name] === true;
 }
 
 function legacy_types_info(mixed $legacy_types): mixed
@@ -57,11 +73,15 @@ function legacy_types_info(mixed $legacy_types): mixed
 
 function convert_property_to_om3(mixed $legacy_property): mixed
 {
+	$type_info = legacy_types_info($legacy_property["types"]);
+	if (has_value($type_info["type_name"]) && is_blacklisted_type($type_info["type_name"])) {
+		return null;
+	}
+
 	$om3 = [
-		"name" => $legacy_property["name"],
+		"name" => strtolower((string) $legacy_property["name"]),
 	];
 
-	$type_info = legacy_types_info($legacy_property["types"]);
 	if (has_value($type_info["type_name"])) {
 		$om3["type.name"] = $type_info["type_name"];
 	}
@@ -85,7 +105,12 @@ function convert_all_properties_to_om3(mixed $legacy_properties): mixed
 	$om3_properties = [];
 
 	foreach ($legacy_properties as $property_name => $legacy_property) {
-		$om3_properties[$property_name] = convert_property_to_om3($legacy_property);
+		$property_key = strtolower((string) $property_name);
+		$converted_property = convert_property_to_om3($legacy_property);
+		if ($converted_property === null) {
+			continue;
+		}
+		$om3_properties[$property_key] = $converted_property;
 	}
 
 	return $om3_properties;
@@ -97,10 +122,6 @@ function convert_model_to_om3(mixed $legacy_type): mixed
 		"name" => normalize_type_path($legacy_type["class"]),
 		"properties" => [],
 	];
-
-	if (has_value($legacy_type["parent"])) {
-		$om3["extends"] = normalize_type_path($legacy_type["parent"]);
-	}
 
 	if (has_value($legacy_type["model"]["abstract"])) {
 		$om3["abstract"] = (bool) $legacy_type["model"]["abstract"];
@@ -130,6 +151,11 @@ function convert_storage_to_om3(mixed $legacy_type): mixed
 	$properties = [];
 	if ($legacy_type["properties"] !== null) {
 		foreach ($legacy_type["properties"] as $property_name => $legacy_property) {
+			$type_info = legacy_types_info($legacy_property["types"]);
+			if (has_value($type_info["type_name"]) && is_blacklisted_type($type_info["type_name"])) {
+				continue;
+			}
+
 			$storage_property = [];
 
 			if (has_value($legacy_property["storage"]["column"])) {
@@ -143,7 +169,7 @@ function convert_storage_to_om3(mixed $legacy_type): mixed
 			}
 
 			if (count($storage_property) > 0) {
-				$properties[$property_name] = $storage_property;
+				$properties[strtolower((string) $property_name)] = $storage_property;
 			}
 		}
 	}
@@ -155,9 +181,9 @@ function convert_storage_to_om3(mixed $legacy_type): mixed
 	return $om3;
 }
 
-function legacy_file_to_model_output_name(string $type_file): string
+function type_path_to_output_name(string $type_path): string
 {
-	return substr($type_file, 0, -5);
+	return $type_path . ".json";
 }
 
 function ensure_dir(string $path): bool
@@ -258,6 +284,9 @@ if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
 			if (!str_ends_with($type_file, ".json")) {
 				continue;
 			}
+			if (str_ends_with($type_file, "_.json")) {
+				continue;
+			}
 
 			if (DEBUG) {
 				echo "converting ";
@@ -280,10 +309,13 @@ if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
 			}
 
 			$model_om3 = convert_model_to_om3($data);
+			if (is_blacklisted_type($model_om3["name"])) {
+				continue;
+			}
 			$storage_om3 = convert_storage_to_om3($data);
-			$output_name = legacy_file_to_model_output_name($type_file);
-			$model_out_path = MODEL_OUT_DIR . "/" . $output_name . ".json";
-			$storage_out_path = STORAGE_OUT_DIR . "/" . $output_name . ".json";
+			$output_name = type_path_to_output_name($model_om3["name"]);
+			$model_out_path = MODEL_OUT_DIR . "/" . $output_name;
+			$storage_out_path = STORAGE_OUT_DIR . "/" . $output_name;
 
 			$model_parent_ready = ensure_parent_dir($model_out_path);
 			$storage_parent_ready = ensure_parent_dir($storage_out_path);
