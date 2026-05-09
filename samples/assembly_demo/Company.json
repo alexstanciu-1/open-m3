@@ -1,0 +1,14 @@
+{
+  "name": "Company",
+  "properties": {
+    "Address": {
+      "type.name": "Address",
+      "struct.sub": true,
+      "properties": {
+        "Premises": {
+          "type.name": "string"
+        }
+      }
+    }
+  }
+}

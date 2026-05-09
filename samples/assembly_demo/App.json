@@ -1,0 +1,25 @@
+{
+  "name": "App",
+  "properties": {
+    "Customers": {
+      "type.name": "Company",
+      "type.list": true,
+      "struct.sub": true,
+      "properties": {
+        "Address": {
+          "type.name": "Address",
+          "struct.sub": true,
+          "properties": {
+            "Country": {
+              "type.name": "string",
+              "disabled": true
+            },
+            "Custom_Field_2": {
+              "type.name": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

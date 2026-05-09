@@ -1,0 +1,14 @@
+{
+  "name": "Address",
+  "properties": {
+    "Street": {
+      "type.name": "string"
+    },
+    "City": {
+      "type.name": "string"
+    },
+    "Country": {
+      "type.name": "string"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\tools\hash_probe;
+
+class item
+{
+	public ?string $name = null;
+	public int $value = 0;
+}
+
+$items /** hash<item> */ = [];
+
+$street = new item();
+$street->name = "Street";
+$street->value = 10;
+$items["Street"] = $street;
+
+$city = new item();
+$city->name = "City";
+$city->value = 20;
+$items["City"] = $city;
+
+echo "has_street=", isset($items["Street"]) ? "yes" : "no", "\n";
+echo "has_country=", isset($items["Country"]) ? "yes" : "no", "\n";
+echo "street_value=", $items["Street"]->value, "\n";
+
+echo "keys=";
+$first = true;
+foreach ($items as $key => $value) {
+	$key_s /** string */ = (string) $key;
+	if (!$first) {
+		echo ",";
+	}
+	echo $key_s;
+	$first = false;
+}
+echo "\n";
+
+echo "pairs=";
+$first = true;
+foreach ($items as $key => $value) {
+	$key_s /** string */ = (string) $key;
+	$typed_value /** item */ = $value;
+	if (!$first) {
+		echo ",";
+	}
+	echo $key_s, ":", $typed_value->value;
+	$first = false;
+}
+echo "\n";
