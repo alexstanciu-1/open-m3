@@ -1,0 +1,1 @@
+{"name":"tfh/property_facil_business_facilities","properties":{"id":{"name":"id","type.name":"int"},"meeting_banquet_facilities":{"name":"meeting_banquet_facilities","type.name":"boolean"},"business_centre":{"name":"business_centre","type.name":"boolean"}}}

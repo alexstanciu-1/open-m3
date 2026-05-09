@@ -21,8 +21,8 @@ require_once "db/reference.hpp";
 
 namespace om3\base\app;
 
-$model_path = "../samples/h2b/model/Property.json";
-$storage_path = "../samples/h2b/storage/Property.json";
+$model_path = "../samples/h2b/model/tfh/property.json";
+$storage_path = "../samples/h2b/storage/tfh/property.json";
 
 $m = \om3\base\load\json_loader::load_model($model_path);
 $s = \om3\base\load\json_loader::load_storage($storage_path);
@@ -35,13 +35,13 @@ if ($m === null || $s === null) {
 	$property_count = $m->property_count;
 	$storage_property_count = $s->property_count;
 	$first_property_name = "";
-	if (isset($m->properties["Id"])) {
-		$first_property = $m->properties["Id"];
+	if (isset($m->properties["id"])) {
+		$first_property = $m->properties["id"];
 		$first_property_name = $first_property->name;
 	}
 	$has_attached_storage = ($m->attached_storage !== null) ? "yes" : "no";
 	$first_attached_storage = "no";
-	if (isset($m->properties["Id"]) && $m->properties["Id"]->attached_storage !== null) {
+	if (isset($m->properties["id"]) && $m->properties["id"]->attached_storage !== null) {
 		$first_attached_storage = "yes";
 	}
 

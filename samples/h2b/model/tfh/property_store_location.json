@@ -1,0 +1,1 @@
+{"name":"tfh/property_store_location","properties":{"id":{"name":"id","type.name":"int"},"store_location":{"name":"store_location","type.name":"tfh/store_location"},"property":{"name":"property","type.name":"tfh/property"},"index":{"name":"index","type.name":"int"}}}

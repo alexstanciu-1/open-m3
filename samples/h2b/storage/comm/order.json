@@ -1,0 +1,1 @@
+{"table":"Orders","properties":{"special_requests":{"sql_type":"TEXT"},"remote_id":{"sql_type":"VARCHAR(65)"},"status":{"sql_type":"enum('Proposal','Submitted','Confirmed','Cancelled','Error')"},"notes":{"sql_type":"TEXT"}}}

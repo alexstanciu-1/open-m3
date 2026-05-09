@@ -1,0 +1,1 @@
+{"name":"tfh/search_room","properties":{"id":{"name":"id","type.name":"int"},"adults":{"name":"adults","type.name":"int"},"children":{"name":"children","type.name":"int"},"infants":{"name":"infants","type.name":"int"},"children_ages":{"name":"children_ages","type.name":"string"},"count":{"name":"count","type.name":"int"}}}

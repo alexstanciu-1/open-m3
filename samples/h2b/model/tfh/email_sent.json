@@ -1,0 +1,1 @@
+{"name":"tfh/email_sent","properties":{"subject":{"name":"subject","type.name":"string"},"body":{"name":"body","type.name":"string"},"from":{"name":"from","type.name":"string"},"to":{"name":"to","type.name":"string"},"date":{"name":"date","type.name":"datetime"},"id":{"name":"id","type.name":"integer"}}}

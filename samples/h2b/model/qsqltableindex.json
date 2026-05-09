@@ -1,0 +1,1 @@
+{"name":"qsqltableindex","properties":{"name":{"name":"name","type.name":"string"},"type":{"name":"type","type.name":"integer"},"columns":{"name":"columns","type.name":"qsqltablecolumn","type.list":true},"id":{"name":"id","type.name":"integer"}}}

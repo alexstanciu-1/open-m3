@@ -1,0 +1,1 @@
+{"name":"loginlog","properties":{"id":{"name":"id","type.name":"int"},"user":{"name":"user","type.name":"user"},"userdata":{"name":"userdata","type.name":"string"},"sessionid":{"name":"sessionid","type.name":"string"},"date":{"name":"date","type.name":"datetime"},"ip":{"name":"ip","type.name":"string"}}}

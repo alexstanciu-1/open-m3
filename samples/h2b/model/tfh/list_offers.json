@@ -1,0 +1,1 @@
+{"name":"tfh/list_offers","properties":{"id":{"name":"id","type.name":"int"},"search":{"name":"search","type.name":"tfh/search_offers"},"limit_offset":{"name":"limit_offset","type.name":"int"},"limit_count":{"name":"limit_count","type.name":"int"}}}

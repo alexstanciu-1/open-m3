@@ -1,0 +1,1 @@
+{"name":"tfh/date_room_rate","properties":{"id":{"name":"id","type.name":"int"},"rate":{"name":"rate","type.name":"tfh/rate_plan"},"price":{"name":"price","type.name":"float"},"restrictions":{"name":"restrictions","type.name":"tfh/restrictions"}}}

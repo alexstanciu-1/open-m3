@@ -1,0 +1,1 @@
+{"table":"Invoices_Collected","properties":{"amount_type":{"sql_type":"enum('total_cached', 'partially_cached')"},"currency_type":{"sql_type":"enum('RON', 'EUR', 'USD', 'custom')"},"status":{"sql_type":"enum('Invoiced')"},"notes":{"sql_type":"TEXT"}}}

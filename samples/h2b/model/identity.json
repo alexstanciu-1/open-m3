@@ -1,0 +1,1 @@
+{"name":"identity","properties":{"user":{"name":"user","type.name":"user"},"session":{"name":"session","type.name":"session"},"id":{"name":"id","type.name":"integer"}}}

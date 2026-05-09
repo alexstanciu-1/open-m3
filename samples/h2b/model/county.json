@@ -1,0 +1,1 @@
+{"name":"county","properties":{"id":{"name":"id","type.name":"string"},"code":{"name":"code","type.name":"string"},"name":{"name":"name","type.name":"string"},"country":{"name":"country","type.name":"country","struct.ref":"Countries"},"place_id":{"name":"place_id","type.name":"string"},"place_mtime":{"name":"place_mtime","type.name":"datetime"}}}

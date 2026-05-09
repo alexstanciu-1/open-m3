@@ -1,0 +1,1 @@
+{"name":"tfh/contact_information","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"department":{"name":"department","type.name":"string"},"isdefault":{"name":"isdefault","type.name":"boolean"}}}

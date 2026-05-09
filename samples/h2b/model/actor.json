@@ -1,0 +1,1 @@
+{"name":"actor","properties":{"name":{"name":"name","type.name":"string","required":true},"email":{"name":"email","type.name":"string"},"phone":{"name":"phone","type.name":"string"},"address":{"name":"address","type.name":"address"},"addresses":{"name":"addresses","type.name":"address","type.list":true},"id":{"name":"id","type.name":"integer"}}}

@@ -1,0 +1,1 @@
+{"name":"tfh/invoice_payment_type","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"default":{"name":"default","type.name":"boolean"},"owner":{"name":"owner","type.name":"comm/company","required":true,"struct.ref":"Companies"}}}

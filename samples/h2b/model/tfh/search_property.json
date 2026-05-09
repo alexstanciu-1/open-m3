@@ -1,0 +1,1 @@
+{"name":"tfh/search_property","properties":{"id":{"name":"id","type.name":"int"},"property":{"name":"property","type.name":"tfh/property","struct.ref":"Properties"},"rooms":{"name":"rooms","type.name":"tfh/property_room","type.list":true,"struct.ref":"Properties_Rooms"},"rate_plans":{"name":"rate_plans","type.name":"tfh/rate_plan","type.list":true,"struct.ref":"Rate_Plans"}}}

@@ -1,0 +1,1 @@
+{"table":"Property_Room_Facil_Other","properties":{"satellite_channels":{"sql_type":"enum('no','free','paid')"},"cable_channels":{"sql_type":"enum('no','free','paid')"},"air_conditioning":{"sql_type":"enum('no','free','paid')"}}}

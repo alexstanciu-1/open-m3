@@ -1,0 +1,1 @@
+{"table":"Cancellation_Policies","properties":{"remote_id":{"sql_type":"VARCHAR(65)"},"fee_mode":{"sql_type":"enum('per_stay','per_person')"}}}

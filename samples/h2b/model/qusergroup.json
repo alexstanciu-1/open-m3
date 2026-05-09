@@ -1,0 +1,1 @@
+{"name":"qusergroup","properties":{"name":{"name":"name","type.name":"string"},"users":{"name":"users","type.name":"quser","type.list":true},"selfuser":{"name":"selfuser","type.name":"quser"},"relations":{"name":"relations","type.name":"qrelation","type.list":true},"groups":{"name":"groups","type.name":"qusergroup","type.list":true},"id":{"name":"id","type.name":"integer"}}}

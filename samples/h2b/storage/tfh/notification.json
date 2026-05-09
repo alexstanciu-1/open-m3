@@ -1,0 +1,1 @@
+{"table":"Notifications","properties":{"details":{"sql_type":"TEXT"},"level":{"sql_type":"enum('info','warning','alert')"}}}

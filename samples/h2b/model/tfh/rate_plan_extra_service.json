@@ -1,0 +1,1 @@
+{"name":"tfh/rate_plan_extra_service","properties":{"id":{"name":"id","type.name":"int"},"remote_id":{"name":"remote_id","type.name":"string"},"offer":{"name":"offer","type.name":"comm/offer","struct.ref":"Offers"},"quantity":{"name":"quantity","type.name":"int"}}}

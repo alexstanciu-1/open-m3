@@ -1,0 +1,1 @@
+{"table":"Date_Room","properties":{"status":{"sql_type":"enum('open','closed','cancel')"}}}

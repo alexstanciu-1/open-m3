@@ -1,0 +1,1 @@
+{"table":"Channel_Contract","properties":{"terms_accepted_ip":{"sql_type":"VARCHAR(32)"},"contract_signed_ip":{"sql_type":"VARCHAR(32)"}}}

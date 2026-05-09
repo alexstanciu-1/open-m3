@@ -1,0 +1,1 @@
+{"name":"failedlogin","properties":{"id":{"name":"id","type.name":"int"},"lasttry":{"name":"lasttry","type.name":"datetime"},"ip":{"name":"ip","type.name":"string"},"username":{"name":"username","type.name":"string"},"ban":{"name":"ban","type.name":"datetime"},"count":{"name":"count","type.name":"int"}}}

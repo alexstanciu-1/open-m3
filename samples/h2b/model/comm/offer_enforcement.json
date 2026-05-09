@@ -1,0 +1,1 @@
+{"name":"comm/offer_enforcement","properties":{"id":{"name":"id","type.name":"int"},"offer":{"name":"offer","type.name":"comm/offer"},"order_by":{"name":"order_by","type.name":"int"},"is_default":{"name":"is_default","type.name":"boolean"},"offer_enforcement_items":{"name":"offer_enforcement_items","type.name":"comm/offer_enforcement_item","type.list":true}}}

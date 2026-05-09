@@ -1,0 +1,1 @@
+{"name":"comm/order_item_config","properties":{"id":{"name":"id","type.name":"int"},"index":{"name":"index","type.name":"int"}}}

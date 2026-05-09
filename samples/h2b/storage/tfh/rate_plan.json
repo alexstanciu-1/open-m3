@@ -1,0 +1,1 @@
+{"table":"Rate_Plans","properties":{"remote_id":{"sql_type":"VARCHAR(65)"},"meal_option":{"sql_type":"enum('none','breakfast','half_board','full_board','all_inclusive')"},"currency":{"sql_type":"enum('','RON','EUR','USD')"},"pricing_mode":{"sql_type":"enum('h2b','per_room','per_person','per_occupancy')"}}}

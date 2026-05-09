@@ -1,0 +1,1 @@
+{"table":"Room_Order_Item_Configs","properties":{"search_record":{"sql_type":"TEXT"},"search_record_headings":{"sql_type":"TEXT"},"payment_policy":{"sql_type":"TEXT"},"cancellation_policy":{"sql_type":"TEXT"},"meal_option":{"sql_type":"enum('none','breakfast','half_board','full_board','all_inclusive')"}}}

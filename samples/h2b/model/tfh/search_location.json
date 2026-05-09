@@ -1,0 +1,1 @@
+{"name":"tfh/search_location","properties":{"id":{"name":"id","type.name":"int"},"caption":{"name":"caption","type.name":"string"},"addresses":{"name":"addresses","type.name":"address","type.list":true}}}

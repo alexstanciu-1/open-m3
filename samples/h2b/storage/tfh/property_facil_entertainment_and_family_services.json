@@ -1,0 +1,1 @@
+{"table":"Property_Facil_Entertainment_And_Family_Services","properties":{"kids_club":{"sql_type":"enum('no','free','paid')"},"babysitting_child_services":{"sql_type":"enum('no','free','paid')"}}}

@@ -1,0 +1,1 @@
+{"name":"document","properties":{"id":{"name":"id","type.name":"string"},"file":{"name":"file","type.name":"file"},"ip":{"name":"ip","type.name":"string"},"user":{"name":"user","type.name":"user"},"date":{"name":"date","type.name":"datetime"}}}

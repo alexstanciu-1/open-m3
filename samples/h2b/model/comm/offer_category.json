@@ -1,0 +1,1 @@
+{"name":"comm/offer_category","properties":{"id":{"name":"id","type.name":"int"},"code":{"name":"code","type.name":"string"},"name":{"name":"name","type.name":"string"}}}

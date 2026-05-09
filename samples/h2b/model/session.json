@@ -1,0 +1,1 @@
+{"name":"session","properties":{"sessionid":{"name":"sessionid","type.name":"string"},"ip":{"name":"ip","type.name":"string"},"id":{"name":"id","type.name":"integer"}}}

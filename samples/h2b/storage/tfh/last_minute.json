@@ -1,0 +1,1 @@
+{"table":"Last_Minute","properties":{"discount_type":{"sql_type":"enum('percent','fixed')"}}}

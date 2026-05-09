@@ -1,0 +1,1 @@
+{"name":"tfh/room_occupancy_limit","properties":{"id":{"name":"id","type.name":"int"},"default_from":{"name":"default_from","type.name":"int"},"default_to":{"name":"default_to","type.name":"int"},"min":{"name":"min","type.name":"int"},"max":{"name":"max","type.name":"int"}}}

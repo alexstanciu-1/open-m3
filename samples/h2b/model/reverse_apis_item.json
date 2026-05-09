@@ -1,0 +1,1 @@
+{"name":"reverse_apis_item","properties":{"id":{"name":"id","type.name":"int"},"on_action":{"name":"on_action","type.name":"string"},"url":{"name":"url","type.name":"string"},"arguments_selector":{"name":"arguments_selector","type.name":"string"}}}

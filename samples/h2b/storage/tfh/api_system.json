@@ -1,0 +1,1 @@
+{"table":"API_Systems","properties":{"reverse_api_default_setup":{"sql_type":"TEXT"},"do_on_price_zero":{"sql_type":"enum('no-action', 'close-rate-plan', 'unset-rate-plan-status', 'delete-rate-plan')"}}}

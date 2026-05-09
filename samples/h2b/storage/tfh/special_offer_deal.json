@@ -1,0 +1,1 @@
+{"table":"Special_Offer_Deal","properties":{"discount_type":{"sql_type":"enum('percent','fixed')"}}}

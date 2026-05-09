@@ -1,0 +1,1 @@
+{"name":"comm/content","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"shortdescription":{"name":"shortdescription","type.name":"string"},"text_html":{"name":"text_html","type.name":"string"}}}

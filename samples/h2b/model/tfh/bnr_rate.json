@@ -1,0 +1,1 @@
+{"name":"tfh/bnr_rate","properties":{"from_currency":{"name":"from_currency","type.name":"string"},"to_currency":{"name":"to_currency","type.name":"string"},"rate":{"name":"rate","type.name":"float"},"date":{"name":"date","type.name":"datetime"},"id":{"name":"id","type.name":"integer"}}}

@@ -1,0 +1,1 @@
+{"name":"tfh/season_time","properties":{"id":{"name":"id","type.name":"int"},"from":{"name":"from","type.name":"date"},"to":{"name":"to","type.name":"date"}}}

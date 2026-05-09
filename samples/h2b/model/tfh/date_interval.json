@@ -1,0 +1,1 @@
+{"name":"tfh/date_interval","properties":{"id":{"name":"id","type.name":"int"},"end_date":{"name":"end_date","type.name":"date","type.list":true},"start_date":{"name":"start_date","type.name":"date","type.list":true}}}

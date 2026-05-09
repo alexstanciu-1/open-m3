@@ -1,0 +1,1 @@
+{"name":"comm/registration_request","properties":{"id":{"name":"id","type.name":"int"},"company":{"name":"company","type.name":"comm/company"},"user":{"name":"user","type.name":"user"},"ip":{"name":"ip","type.name":"string"},"date":{"name":"date","type.name":"datetime"}}}

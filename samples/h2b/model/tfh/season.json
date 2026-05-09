@@ -1,0 +1,1 @@
+{"name":"tfh/season","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"season_time":{"name":"season_time","type.name":"tfh/season_time","type.list":true},"owner":{"name":"owner","type.name":"comm/company","required":true,"struct.ref":"Companies"}}}

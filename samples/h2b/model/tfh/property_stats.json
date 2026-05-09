@@ -1,0 +1,1 @@
+{"name":"tfh/property_stats","properties":{"id":{"name":"id","type.name":"int"},"count_live_rates":{"name":"count_live_rates","type.name":"int"},"has_age_intervals":{"name":"has_age_intervals","type.name":"boolean"}}}

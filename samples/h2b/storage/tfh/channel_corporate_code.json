@@ -1,0 +1,1 @@
+{"table":"Channel_Corporate_Codes","properties":{"name":{"sql_type":"VARCHAR(255)"},"codes":{"sql_type":"TEXT"}}}

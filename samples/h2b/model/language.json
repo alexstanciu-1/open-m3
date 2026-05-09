@@ -1,0 +1,1 @@
+{"name":"language","properties":{"default":{"name":"default","type.name":"boolean"},"code":{"name":"code","type.name":"string","required":true},"name":{"name":"name","type.name":"string","required":true},"id":{"name":"id","type.name":"integer"},"owner":{"name":"owner","type.name":"comm/company","required":true,"struct.ref":"Companies"}}}

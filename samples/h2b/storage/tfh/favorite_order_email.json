@@ -1,0 +1,1 @@
+{"table":"Favorite_Order_Email","properties":{"email_header_text":{"sql_type":"TEXT"},"email_footer_text":{"sql_type":"TEXT"}}}

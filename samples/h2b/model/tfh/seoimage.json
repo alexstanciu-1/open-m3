@@ -1,0 +1,1 @@
+{"name":"tfh/seoimage","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"path":{"name":"path","type.name":"file"},"alt":{"name":"alt","type.name":"string"},"order":{"name":"order","type.name":"int"}}}

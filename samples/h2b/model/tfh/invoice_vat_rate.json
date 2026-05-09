@@ -1,0 +1,1 @@
+{"name":"tfh/invoice_vat_rate","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"percent":{"name":"percent","type.name":"int"},"default":{"name":"default","type.name":"boolean"},"owner":{"name":"owner","type.name":"comm/company","required":true,"struct.ref":"Companies"}}}

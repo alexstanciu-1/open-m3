@@ -1,0 +1,1 @@
+{"name":"tfh/key_value","properties":{"id":{"name":"id","type.name":"int"},"key":{"name":"key","type.name":"string"},"value":{"name":"value","type.name":"string"},"value_text":{"name":"value_text","type.name":"string"},"rate_set_request":{"name":"rate_set_request","type.name":"tfh/rate_set_request"}}}

@@ -1,0 +1,1 @@
+{"name":"tfh/service_calendar_date","properties":{"id":{"name":"id","type.name":"int"},"calendar":{"name":"calendar","type.name":"tfh/service_calendar"},"date":{"name":"date","type.name":"date"},"status":{"name":"status","type.name":"string"}}}

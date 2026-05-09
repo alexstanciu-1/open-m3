@@ -1,0 +1,1 @@
+{"name":"tfh/property_room_availability_stats","properties":{"id":{"name":"id","type.name":"int"},"has_one_year_prices":{"name":"has_one_year_prices","type.name":"boolean"},"no_prices_interval":{"name":"no_prices_interval","type.name":"tfh/date_interval","type.list":true},"has_prices_interval":{"name":"has_prices_interval","type.name":"date","type.list":true}}}

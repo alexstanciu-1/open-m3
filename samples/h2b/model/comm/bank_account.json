@@ -1,0 +1,1 @@
+{"name":"comm/bank_account","properties":{"use_on_invoice":{"name":"use_on_invoice","type.name":"boolean"},"id":{"name":"id","type.name":"int"},"bank_name":{"name":"bank_name","type.name":"string"},"iban":{"name":"iban","type.name":"string"},"currency":{"name":"currency","type.name":"string"}}}

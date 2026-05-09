@@ -1,0 +1,1 @@
+{"table":"Early_Booking","properties":{"date_type":{"sql_type":"enum('until_date','days_until_checkin')"},"discount_type":{"sql_type":"enum('percent','fixed')"}}}

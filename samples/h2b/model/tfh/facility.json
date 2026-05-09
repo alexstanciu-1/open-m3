@@ -1,0 +1,1 @@
+{"name":"tfh/facility","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"tag":{"name":"tag","type.name":"string"},"icon":{"name":"icon","type.name":"string"}}}

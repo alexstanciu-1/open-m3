@@ -1,0 +1,1 @@
+{"name":"tfh/terms_and_conditions_page","properties":{"id":{"name":"id","type.name":"int"},"version":{"name":"version","type.name":"string","required":true},"active":{"name":"active","type.name":"boolean"},"content_html":{"name":"content_html","type.name":"string"},"is_default":{"name":"is_default","type.name":"boolean"},"date":{"name":"date","type.name":"date"}}}

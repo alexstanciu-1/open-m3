@@ -1,0 +1,1 @@
+{"name":"tfh/channel_corporate_code","properties":{"id":{"name":"id","type.name":"int"},"name":{"name":"name","type.name":"string"},"codes":{"name":"codes","type.name":"string"},"owner":{"name":"owner","type.name":"comm/company","required":true,"struct.ref":"Companies"}}}

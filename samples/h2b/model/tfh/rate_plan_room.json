@@ -1,0 +1,1 @@
+{"name":"tfh/rate_plan_room","properties":{"id":{"name":"id","type.name":"int"},"room":{"name":"room","type.name":"tfh/property_room"},"rate_plan":{"name":"rate_plan","type.name":"tfh/rate_plan"},"index":{"name":"index","type.name":"int"}}}

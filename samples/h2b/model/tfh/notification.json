@@ -1,0 +1,1 @@
+{"name":"tfh/notification","properties":{"id":{"name":"id","type.name":"int"},"title":{"name":"title","type.name":"string"},"details":{"name":"details","type.name":"string"},"date":{"name":"date","type.name":"date"},"level":{"name":"level","type.name":"string"},"dismiss":{"name":"dismiss","type.name":"boolean"}}}

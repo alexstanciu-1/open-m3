@@ -1,0 +1,1 @@
+{"table":"Persons","properties":{"gender":{"sql_type":"enum('Male','Female')"},"mobile":{"sql_type":"VARCHAR(32)"},"homenumber":{"sql_type":"VARCHAR(32)"},"faxnumber":{"sql_type":"VARCHAR(32)"},"title":{"sql_type":"enum('Mr.','Mrs.','Ms.')"}}}
