@@ -1,6 +1,3 @@
-<?php
-declare(strict_types=1);
-
 echo "without_json_decode\n";
 
 $data = (object) ["a" => 1, "b" => 2];

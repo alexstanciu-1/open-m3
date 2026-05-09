@@ -1,6 +1,3 @@
-<?php
-declare(strict_types=1);
-
 require_once "node_base.hpp";
 require_once "mat.hpp";
 require_once "materialization_probe.hpp";

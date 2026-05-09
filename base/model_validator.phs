@@ -1,6 +1,3 @@
-<?php
-declare(strict_types=1);
-
 require_once "model_assembler.hpp";
 
 namespace om3\base\assemble;
@@ -52,7 +49,7 @@ class model_validator
 	private function validate_model_properties(
 		string $owner_path,
 		\om3\base\schema\model $model,
-		$known_types /** hash<bool> */
+		$known_types hash<bool>
 	): void
 	{
 		foreach ($model->properties as $property_name => $property) {
@@ -66,7 +63,7 @@ class model_validator
 		string $owner_path,
 		string $property_key,
 		\om3\base\schema\model_property $property,
-		$known_types /** hash<bool> */
+		$known_types hash<bool>
 	): void
 	{
 			$property_path = $owner_path . "." . $property_key;
@@ -87,7 +84,7 @@ class model_validator
 			}
 	}
 
-	private function is_known_type(string $type_name, $known_types /** hash<bool> */): bool
+	private function is_known_type(string $type_name, $known_types hash<bool>): bool
 	{
 		if (isset($known_types[$type_name])) {
 			return true;

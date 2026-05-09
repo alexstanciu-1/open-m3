@@ -1,6 +1,3 @@
-<?php
-declare(strict_types=1);
-
 require_once "schema/model.hpp";
 require_once "schema/model_property.hpp";
 require_once "schema/storage.hpp";
