@@ -1,0 +1,1714 @@
+<?php
+declare(strict_types=1);
+
+require_once "schema/model.hpp";
+require_once "schema/model_property.hpp";
+require_once "json_loader.hpp";
+require_once "orm/root.hpp";
+require_once "orm/node.hpp";
+require_once "orm/error.hpp";
+require_once "orm/audit_result.hpp";
+
+namespace om3\base\assemble;
+
+class model_cache_entry
+{
+	public ?string $key = null;
+	public ?\om3\base\schema\model $model = null;
+	public ?string $path = null;
+}
+
+class property_hash_result
+{
+	public int $property_count = 0;
+	public $properties /** hash<om3\base\schema\model_property> */ = [];
+}
+
+class traversal_entry
+{
+	public ?string $path = null;
+	public ?string $raw_type_key = null;
+	public ?\om3\base\schema\model $effective_model = null;
+	public ?\om3\base\schema\model_property $usage_property = null;
+	public bool $has_custom = false;
+}
+
+class orm_build_entry
+{
+	public ?string $path = null;
+	public ?string $raw_type_key = null;
+	public ?\om3\base\schema\model $effective_model = null;
+	public ?\om3\base\schema\model_property $usage_property = null;
+	public ?\om3\base\orm\orm_node_base $parent_node = null;
+	public bool $has_custom = false;
+}
+
+class string_list_box
+{
+	public $items /** vector<string> */ = [];
+}
+
+class mixed_hash_box
+{
+	public $items /** hash<mixed> */ = [];
+}
+
+class legacy_orm_build_entry
+{
+	public ?string $path = null;
+	public ?string $type_key = null;
+	public $type_data /** mixed */ = null;
+	public ?\om3\base\orm\orm_node_base $parent_node = null;
+}
+
+/** @lib-export */
+class model_assembler
+{
+	public $raw_models /** vector<model_cache_entry> */ = [];
+	public $assembled_models /** vector<model_cache_entry> */ = [];
+	public $errors /** vector<string> */ = [];
+
+	public function register_raw_model(
+		string $type_key,
+		\om3\base\schema\model $model,
+		?string $path = null
+	): void
+	{
+		if ($model->name === null || $model->name === "") {
+			$model->name = $type_key;
+		}
+
+		$entry = new model_cache_entry();
+		$entry->key = $type_key;
+		$entry->model = $model;
+		$entry->path = $path;
+		$this->raw_models[] = $entry;
+	}
+
+	public function load_model_file(string $type_key, string $path): bool
+	{
+		$model = \om3\base\load\json_loader::load_model($path);
+		if ($model === null) {
+			$this->errors[] = "load_failed:" . $type_key . ":" . $path;
+			return false;
+		}
+
+		if ($model->name === null || $model->name === "") {
+			$model->name = $type_key;
+		}
+
+		$this->register_raw_model($type_key, $model, $path);
+		return true;
+	}
+
+	public function find_raw_model(string $type_key): ?\om3\base\schema\model
+	{
+		for ($i = 0; $i < count($this->raw_models); $i++) {
+			$entry = $this->raw_models[$i];
+			if ($entry->key == $type_key) {
+				return $entry->model;
+			}
+		}
+		return null;
+	}
+
+	public function find_assembled_model(string $assembled_path_key): ?\om3\base\schema\model
+	{
+		for ($i = 0; $i < count($this->assembled_models); $i++) {
+			$entry = $this->assembled_models[$i];
+			if ($entry->key == $assembled_path_key) {
+				return $entry->model;
+			}
+		}
+		return null;
+	}
+
+	public function assemble_path(string $assembled_path_key, string $raw_type_key): ?\om3\base\schema\model
+	{
+		$cached = $this->find_assembled_model($assembled_path_key);
+		if ($cached !== null) {
+			return $cached;
+		}
+
+		$raw_model = $this->find_raw_model($raw_type_key);
+		if ($raw_model === null) {
+			$this->errors[] = "missing_raw_type:" . $raw_type_key;
+			return null;
+		}
+
+		$assembled = $this->clone_model($raw_model);
+		$assembled->name = $assembled_path_key;
+		$this->put_assembled_model($assembled_path_key, $assembled);
+		return $assembled;
+	}
+
+	public function traverse_root_echo(string $root_path, string $raw_type_key): void
+	{
+		$root_model = $this->find_raw_model($raw_type_key);
+		if ($root_model === null) {
+			echo "traverse_missing_root:", $raw_type_key, "\n";
+			return;
+		}
+
+		$processed_plain_types /** hash<bool> */ = [];
+		$current_level /** vector<traversal_entry> */ = [];
+
+		$root_entry = new traversal_entry();
+		$root_entry->path = $root_path;
+		$root_entry->raw_type_key = $raw_type_key;
+		$root_entry->effective_model = $root_model;
+		$root_entry->has_custom = false;
+		$current_level[] = $root_entry;
+
+		$depth /** int */ = 0;
+		while ((count($current_level) > 0) && ($depth < 16)) {
+			echo "depth=", $depth, "\n";
+			$next_level /** vector<traversal_entry> */ = [];
+
+			foreach ($current_level as $entry) {
+				$entry_path = $entry->path;
+				$entry_type = $entry->raw_type_key;
+				$entry_model = $entry->effective_model;
+				if ($entry_path === null || $entry_type === null || $entry_model === null) {
+					continue;
+				}
+
+				echo "node:", $entry_path, ":", $entry_type, "\n";
+
+				foreach ($entry_model->properties as $property_name => $_property_unused) {
+					$property_key /** string */ = (string) $property_name;
+					$property = $entry_model->properties[$property_key];
+					$property_path = $entry_path . "." . $property_key;
+					$property_type /** string */ = "scalar";
+					if ($property->type_name !== null) {
+						$property_type = $property->type_name;
+					}
+					$is_list = $property->type_list;
+					$is_sub = $property->struct_sub;
+					$struct_ref = $property->struct_ref;
+					$is_weakref = $property->struct_weakref;
+					$child_type_name = $property->type_name;
+					$child_has_custom = ($property->property_count > 0);
+
+					echo "property:", $property_path, ":", $property_type;
+					if ($is_list) {
+						echo "[]";
+					}
+					if ($is_sub) {
+						echo ":sub";
+					} else if ($struct_ref !== null) {
+						echo ":ref";
+					} else if ($is_weakref) {
+						echo ":weakref";
+					}
+					echo "\n";
+
+					if ($child_type_name === null || $child_type_name === "") {
+						continue;
+					}
+					if (!$is_sub) {
+						continue;
+					}
+
+					if ((!$child_has_custom) && isset($processed_plain_types[$child_type_name])) {
+						echo "skip_processed_plain_type:", $property_path, ":", $child_type_name, "\n";
+						continue;
+					}
+
+					$child_model = $child_has_custom
+						? $this->refine_sub_path($property_path, $child_type_name, $property)
+						: $this->assemble_path($property_path, $child_type_name);
+					if ($child_model === null) {
+						echo "child_assemble_failed:", $property_path, ":", $child_type_name, "\n";
+						continue;
+					}
+
+					if (!$child_has_custom) {
+						$processed_plain_types[$child_type_name] = true;
+					}
+
+					$child_entry = new traversal_entry();
+					$child_entry->path = $property_path;
+					$child_entry->raw_type_key = $child_type_name;
+					$child_entry->effective_model = $child_model;
+					$child_entry->usage_property = $property;
+					$child_entry->has_custom = $child_has_custom;
+					$next_level[] = $child_entry;
+				}
+			}
+
+			$current_level = $next_level;
+			$depth = $depth + 1;
+		}
+
+		if ($depth >= 16 && count($current_level) > 0) {
+			echo "depth_limit_reached\n";
+		}
+	}
+
+	public function build_orm_root(string $root_path, string $raw_type_key): ?\om3\base\orm\orm_root
+	{
+		$root_model = $this->find_raw_model($raw_type_key);
+		if ($root_model === null) {
+			$this->errors[] = "orm_missing_root:" . $raw_type_key;
+			return null;
+		}
+
+		$root = new \om3\base\orm\orm_root();
+		$root->path = $root_path;
+		$root->name = $root_path;
+		$root->is_root = true;
+		$root->is_scalar = false;
+		$root->is_list = false;
+		$root->type = $raw_type_key;
+		$root->properties = $root_model->properties;
+		$root->type_models[] = $root_model;
+
+		$current_level /** vector<orm_build_entry> */ = [];
+		$root_entry = new orm_build_entry();
+		$root_entry->path = $root_path;
+		$root_entry->raw_type_key = $raw_type_key;
+		$root_entry->effective_model = $root_model;
+		$root_entry->parent_node = $root;
+		$current_level[] = $root_entry;
+
+		$depth /** int */ = 0;
+		while ((count($current_level) > 0) && ($depth < $root->max_depth)) {
+			$next_level /** vector<orm_build_entry> */ = [];
+
+			foreach ($current_level as $entry) {
+				$entry_path = $entry->path;
+				$entry_model = $entry->effective_model;
+				$entry_parent = $entry->parent_node;
+				if ($entry_path === null || $entry_model === null || $entry_parent === null) {
+					continue;
+				}
+
+				foreach ($entry_model->properties as $property_name => $_property_unused) {
+					$property_key /** string */ = (string) $property_name;
+					$property = $entry_model->properties[$property_key];
+					$property_path = $entry_path . "." . $property_key;
+					$child_type_name = $property->type_name;
+					if ($child_type_name === null || $child_type_name === "") {
+						continue;
+					}
+
+					$target_model = $this->find_raw_model($child_type_name);
+					$effective_child_model = $target_model;
+					$has_custom = ($property->property_count > 0);
+					if ($has_custom && $property->struct_sub) {
+						$effective_child_model = $this->refine_sub_path($property_path, $child_type_name, $property);
+					} else if ($target_model !== null) {
+						$effective_child_model = $this->assemble_path($property_path, $child_type_name);
+					}
+
+					$child = new \om3\base\orm\orm_node();
+					$child->path = $property_path;
+					$child->parent = $entry_parent;
+					$child->name = $property_key;
+					$child->is_root = false;
+					$child->is_list = $property->type_list;
+					$child->branch_kind = $this->get_property_branch_kind($property);
+					$child->type = $child_type_name;
+					$child->materialization = $this->build_temp_materialization($property, $entry_model, $effective_child_model);
+					$this->populate_mat_list($child, $property, $entry_model, $effective_child_model);
+
+					if ($effective_child_model !== null) {
+						$child->properties = $effective_child_model->properties;
+						$child->type_models[] = $effective_child_model;
+						$child->is_scalar = false;
+					} else {
+						$child->is_scalar = true;
+					}
+
+					$entry_parent->children[] = $child;
+					$root->nodes[] = $child;
+
+					if ($effective_child_model !== null && (!$child->is_scalar)) {
+						$next_entry = new orm_build_entry();
+						$next_entry->path = $property_path;
+						$next_entry->raw_type_key = $child_type_name;
+						$next_entry->effective_model = $effective_child_model;
+						$next_entry->usage_property = $property;
+						$next_entry->parent_node = $child;
+						$next_entry->has_custom = $has_custom;
+						$next_level[] = $next_entry;
+					}
+				}
+			}
+
+			$current_level = $next_level;
+			$depth = $depth + 1;
+		}
+
+		if ($depth >= $root->max_depth && count($current_level) > 0) {
+			$error = new \om3\base\orm\orm_error();
+			$error->code = "depth_limit_reached";
+			$error->path = $root_path;
+			$error->message = "ORM graph build reached the configured depth limit.";
+			$root->errors[] = $error;
+		}
+
+		return $root;
+	}
+
+	public function audit_orm_root(\om3\base\orm\orm_root $root): \om3\base\orm\orm_audit_result
+	{
+		$result = new \om3\base\orm\orm_audit_result();
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			if (count($node->type_models) > 1) {
+				$entry = new \om3\base\orm\orm_audit_entry();
+				$entry->path = $node->path;
+				$entry->name = $node->name;
+				$entry->count = count($node->type_models);
+				for ($type_model_index = 0; $type_model_index < count($node->type_models); $type_model_index++) {
+					$type_model = $node->type_models[$type_model_index];
+					if ($type_model->name !== null) {
+						$entry->values[] = $type_model->name;
+					}
+				}
+				$result->multi_type[] = $entry;
+			}
+
+			$mat = $node->materialization;
+			$mat_tables = $this->collect_node_mat_tables($node);
+			if (count($mat_tables->items) > 1) {
+					$entry = new \om3\base\orm\orm_audit_entry();
+					$entry->path = $node->path;
+					$entry->name = $node->name;
+					$entry->count = count($mat_tables->items);
+					for ($table_index = 0; $table_index < count($mat_tables->items); $table_index++) {
+						$entry->values[] = $mat_tables->items[$table_index];
+					}
+					$result->multi_table[] = $entry;
+			}
+
+			$mat_columns = $this->collect_node_mat_columns($node);
+			if (count($mat_columns->items) > 1) {
+					$entry = new \om3\base\orm\orm_audit_entry();
+					$entry->path = $node->path;
+					$entry->name = $node->name;
+					$entry->count = count($mat_columns->items);
+					for ($column_index = 0; $column_index < count($mat_columns->items); $column_index++) {
+						$entry->values[] = $mat_columns->items[$column_index];
+					}
+					$result->multi_column[] = $entry;
+			}
+
+			if ($this->node_uses_collection_table($node)) {
+				$entry = new \om3\base\orm\orm_audit_entry();
+				$entry->path = $node->path;
+				$entry->name = $node->name;
+				$entry->count = 1;
+				for ($table_index = 0; $table_index < count($mat_tables->items); $table_index++) {
+					$entry->values[] = $mat_tables->items[$table_index];
+				}
+				$result->collection_table[] = $entry;
+			}
+		}
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+				$child_types /** hash<vector<string>> */ = [];
+				for ($child_index = 0; $child_index < count($node->children); $child_index++) {
+					$child = $node->children[$child_index];
+					if ($child->name === null || $child->type === null) {
+						continue;
+					}
+					if (!isset($child_types[$child->name])) {
+						$empty_list /** vector<string> */ = [];
+						$child_types[$child->name] = $empty_list;
+					}
+					$child_types[$child->name][] = $child->type;
+				}
+
+			foreach ($child_types as $child_name => $type_list) {
+				$unique_types /** hash<bool> */ = [];
+				foreach ($type_list as $type_name) {
+					$unique_types[(string) $type_name] = true;
+				}
+				if (count($unique_types) > 1) {
+					$entry = new \om3\base\orm\orm_audit_entry();
+					$entry->path = $node->path;
+					$entry->name = (string) $child_name;
+					$entry->count = count($unique_types);
+					foreach ($unique_types as $type_name => $_unused_flag) {
+						$entry->values[] = (string) $type_name;
+					}
+					$result->multi_type[] = $entry;
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	public function build_legacy_orm_root(string $dir, string $root_class): ?\om3\base\orm\orm_root
+	{
+		$type_map_box = $this->load_legacy_type_map($dir);
+		$type_map = $type_map_box->items;
+		$root_type_key = $this->normalize_legacy_type_name($root_class);
+		if ($root_type_key === null || $root_type_key === "" || !isset($type_map[$root_type_key])) {
+			$this->errors[] = "legacy_missing_root:" . $dir . ":" . $root_class;
+			return null;
+		}
+
+		$root_type_data = $type_map[$root_type_key];
+		$root = new \om3\base\orm\orm_root();
+		$root->path = $root_type_key;
+		$root->name = $this->legacy_last_segment($root_type_key);
+		$root->is_root = true;
+		$root->is_scalar = false;
+		$root->is_list = false;
+		$root->type = $root_type_key;
+		$this->populate_legacy_visible_properties($root, $root_type_data, $type_map_box);
+		$root->type_models[] = $this->build_legacy_model_stub($root_type_key);
+
+		$current_level /** vector<legacy_orm_build_entry> */ = [];
+		$processed_plain_types /** hash<bool> */ = [];
+		$root_entry = new legacy_orm_build_entry();
+		$root_entry->path = $root_type_key;
+		$root_entry->type_key = $root_type_key;
+		$root_entry->type_data = $root_type_data;
+		$root_entry->parent_node = $root;
+		$current_level[] = $root_entry;
+
+		$depth /** int */ = 0;
+		while ((count($current_level) > 0) && ($depth < $root->max_depth)) {
+			$next_level /** vector<legacy_orm_build_entry> */ = [];
+
+			for ($entry_index = 0; $entry_index < count($current_level); $entry_index++) {
+				$entry = $current_level[$entry_index];
+				$entry_path = $entry->path;
+				$entry_parent = $entry->parent_node;
+				$entry_type_data = $entry->type_data;
+				if ($entry_path === null || $entry_parent === null || $entry_type_data === null || !isset($entry_type_data["properties"])) {
+					continue;
+				}
+
+				foreach ($entry_type_data["properties"] as $property_name => $property_data) {
+					$property_key /** string */ = (string) $property_name;
+					if (!$this->legacy_property_is_materialized($property_data)) {
+						continue;
+					}
+					$property_path = $entry_path . "." . $this->normalize_legacy_property_name($property_key);
+						$type_names_box = $this->collect_legacy_property_types($property_data);
+						$type_names = $type_names_box->items;
+						if (count($type_names) <= 0) {
+						continue;
+					}
+
+					$child = new \om3\base\orm\orm_node();
+					$child->path = $property_path;
+					$child->parent = $entry_parent;
+					$child->name = $this->normalize_legacy_property_name($property_key);
+					$child->is_root = false;
+						$child->is_list = $this->legacy_property_is_list($property_data);
+						$child->branch_kind = $this->get_legacy_property_branch_kind($property_data, $type_names_box, $type_map_box);
+						$child->materialization = $this->build_temp_materialization_from_legacy($property_key, $property_data, $entry_type_data, $type_map_box, $type_names_box);
+						$this->populate_legacy_mat_list($child, $property_key, $property_data, $entry_type_data, $type_map_box, $type_names_box);
+						$child->type = $this->resolve_common_legacy_type($type_names_box, $type_map_box);
+						$empty_properties /** hash<om3\base\schema\model_property> */ = [];
+						$child->properties = $empty_properties;
+
+					$has_model_target = false;
+					for ($type_index = 0; $type_index < count($type_names); $type_index++) {
+						$type_name = $type_names[$type_index];
+						if ($this->is_legacy_scalar_type($type_name)) {
+							continue;
+						}
+						$child->type_models[] = $this->build_legacy_model_stub($type_name);
+						$has_model_target = true;
+					}
+
+						$child->is_scalar = !$has_model_target;
+						if (!$child->is_scalar && count($type_names) > 0) {
+							$first_type = $type_names[0];
+							if (isset($type_map[$first_type])) {
+								$child_type_data = $type_map[$first_type];
+								$this->populate_legacy_visible_properties($child, $child_type_data, $type_map_box);
+							}
+						}
+
+					$entry_parent->children[] = $child;
+					$root->nodes[] = $child;
+
+						if (!$child->is_scalar) {
+							for ($type_index = 0; $type_index < count($type_names); $type_index++) {
+								$type_name = $type_names[$type_index];
+								if (!isset($type_map[$type_name])) {
+									continue;
+								}
+								if (isset($processed_plain_types[$type_name])) {
+									continue;
+								}
+								$processed_plain_types[$type_name] = true;
+
+								$next_entry = new legacy_orm_build_entry();
+							$next_entry->path = $property_path;
+							$next_entry->type_key = $type_name;
+							$next_entry->type_data = $type_map[$type_name];
+							$next_entry->parent_node = $child;
+							$next_level[] = $next_entry;
+						}
+					}
+				}
+			}
+
+			$current_level = $next_level;
+			$depth = $depth + 1;
+		}
+
+		if ($depth >= $root->max_depth && count($current_level) > 0) {
+			$error = new \om3\base\orm\orm_error();
+			$error->code = "depth_limit_reached";
+			$error->path = $root_type_key;
+			$error->message = "Legacy ORM graph build reached the configured depth limit.";
+			$root->errors[] = $error;
+		}
+
+		return $root;
+	}
+
+	public function refine_sub_path(
+		string $assembled_path_key,
+		string $raw_type_key,
+		\om3\base\schema\model_property $usage_property
+	): ?\om3\base\schema\model
+	{
+		$assembled = $this->assemble_path($assembled_path_key, $raw_type_key);
+		if ($assembled === null) {
+			return null;
+		}
+		if (!$this->validate_sub_usage($assembled_path_key, $usage_property)) {
+			return null;
+		}
+
+		$effective = new property_hash_result();
+
+		foreach ($assembled->properties as $property_name => $typed_property) {
+			$override = $this->find_child_property($usage_property, (string) $property_name);
+			if ($override !== null && $override->disabled) {
+				continue;
+			}
+
+			if ($override !== null) {
+				$effective->properties[(string) $property_name] = $this->merge_property($typed_property, $override);
+			} else {
+				$effective->properties[(string) $property_name] = $typed_property;
+			}
+			$effective->property_count = $effective->property_count + 1;
+		}
+
+		foreach ($usage_property->properties as $property_name => $_typed_override_unused) {
+			$override_key /** string */ = (string) $property_name;
+			$typed_override = $usage_property->properties[$override_key];
+			if ($typed_override->disabled) {
+				continue;
+			}
+			if (isset($effective->properties[$override_key])) {
+				continue;
+			}
+			$effective->properties[$override_key] = $this->clone_property($typed_override);
+			$effective->property_count = $effective->property_count + 1;
+		}
+
+		$assembled->properties = $effective->properties;
+		$assembled->property_count = $effective->property_count;
+		$this->put_assembled_model($assembled_path_key, $assembled);
+		return $assembled;
+	}
+
+	private function put_assembled_model(string $assembled_path_key, \om3\base\schema\model $assembled): void
+	{
+		for ($i = 0; $i < count($this->assembled_models); $i++) {
+			$existing = $this->assembled_models[$i];
+			if ($existing->key == $assembled_path_key) {
+				$existing->model = $assembled;
+				return;
+			}
+		}
+
+		$entry = new model_cache_entry();
+		$entry->key = $assembled_path_key;
+		$entry->model = $assembled;
+		$this->assembled_models[] = $entry;
+	}
+
+	private function validate_sub_usage(string $assembled_path_key, \om3\base\schema\model_property $usage_property): bool
+	{
+		if ($usage_property->property_count <= 0) {
+			return true;
+		}
+		if ($usage_property->struct_ref !== null || $usage_property->struct_weakref) {
+			$this->errors[] = "invalid_refinement_target:" . $assembled_path_key;
+			return false;
+		}
+		if (!$usage_property->struct_sub && $usage_property->type_name !== null) {
+			$this->errors[] = "refinement_requires_struct_sub:" . $assembled_path_key;
+			return false;
+		}
+		return true;
+	}
+
+	private function get_property_branch_kind(\om3\base\schema\model_property $property): string
+	{
+		if ($property->type_list) {
+			if ($property->struct_sub) {
+				return "collection_sub";
+			}
+			if ($property->struct_ref !== null || $property->struct_weakref) {
+				return "collection_ref";
+			}
+			return "collection_scalar";
+		}
+
+		if ($property->struct_sub) {
+			return "sub";
+		}
+		if ($property->struct_ref !== null) {
+			return "ref";
+		}
+		if ($property->struct_weakref) {
+			return "weakref";
+		}
+		return "scalar";
+	}
+
+	private function build_temp_materialization(
+		\om3\base\schema\model_property $property,
+		\om3\base\schema\model $parent_model,
+		?\om3\base\schema\model $target_model
+	): \om3\base\orm\orm_materialization_probe
+	{
+		$out = new \om3\base\orm\orm_materialization_probe();
+		$tables = new string_list_box();
+		$columns = new string_list_box();
+		$out->via_collection_table = false;
+		$out->mode = "unknown";
+
+		$property_storage = $property->attached_storage;
+		$parent_storage = $parent_model->attached_storage;
+		$target_storage /** ?om3\base\schema\storage */ = null;
+		if ($target_model !== null) {
+			$target_storage = $target_model->attached_storage;
+		}
+
+		if ($property_storage !== null && $property_storage->relation_table !== null && $property_storage->relation_table !== "") {
+			$tables->items[] = $property_storage->relation_table;
+			$out->via_collection_table = $property->type_list;
+		}
+
+		if ($property_storage !== null && $property_storage->relation_this_column !== null && $property_storage->relation_this_column !== "") {
+			$columns->items[] = $property_storage->relation_this_column;
+		}
+		if ($property_storage !== null && $property_storage->relation_target_column !== null && $property_storage->relation_target_column !== "") {
+			$columns->items[] = $property_storage->relation_target_column;
+		}
+		if ($property_storage !== null && $property_storage->column !== null && $property_storage->column !== "") {
+			$columns->items[] = $property_storage->column;
+		}
+
+		if ($property->struct_sub) {
+			if ($property_storage !== null && $property_storage->kind === "inline") {
+				$out->mode = "inline";
+				if ($parent_storage !== null && $parent_storage->table !== null && $parent_storage->table !== "") {
+					$tables->items[] = $parent_storage->table;
+				}
+			} else if ($property_storage !== null && $property_storage->relation_table !== null && $property_storage->relation_table !== "") {
+				$out->mode = "custom_table";
+			} else {
+				$out->mode = "type_table";
+				if ($target_storage !== null && $target_storage->table !== null && $target_storage->table !== "") {
+					$tables->items[] = $target_storage->table;
+				} else if ($property->type_name !== null) {
+					$tables->items[] = $this->infer_default_table_name($property->type_name);
+				}
+			}
+		} else if ($property->struct_ref !== null || $property->struct_weakref) {
+			if ($property->type_list) {
+				$out->mode = "collection_table";
+				$out->via_collection_table = true;
+			} else {
+				$out->mode = "ref_column";
+			}
+
+			if (count($columns->items) <= 0 && $property->name !== null) {
+				$columns->items[] = $property->name . "_id";
+			}
+			if ($target_storage !== null && $target_storage->table !== null && $target_storage->table !== "") {
+				$tables->items[] = $target_storage->table;
+			}
+		} else {
+			if ($property->type_list) {
+				$out->mode = "collection_table";
+				$out->via_collection_table = true;
+			} else {
+				$out->mode = "value_column";
+			}
+
+			if (count($columns->items) <= 0 && $property->name !== null) {
+				$columns->items[] = $property->name;
+			}
+			if ($parent_storage !== null && $parent_storage->table !== null && $parent_storage->table !== "") {
+				$tables->items[] = $parent_storage->table;
+			}
+		}
+
+		$tables_box = $this->unique_strings($tables);
+		$columns_box = $this->unique_strings($columns);
+		$out->table_count = count($tables_box->items);
+		$out->column_count = count($columns_box->items);
+		$out->tables_csv = $this->join_strings($tables_box);
+		$out->columns_csv = $this->join_strings($columns_box);
+		return $out;
+	}
+
+	private function build_temp_materialization_from_legacy(
+		string $property_name,
+		mixed $property_data,
+		mixed $parent_type_data,
+		mixed_hash_box $type_map,
+		string_list_box $type_names
+	): \om3\base\orm\orm_materialization_probe
+	{
+		$out = new \om3\base\orm\orm_materialization_probe();
+		$tables = new string_list_box();
+		$columns = new string_list_box();
+		$out->via_collection_table = false;
+		$out->mode = "unknown";
+
+		$property_storage = null;
+		if (isset($property_data["storage"])) {
+			$property_storage = $property_data["storage"];
+		}
+		$parent_storage = null;
+		if (isset($parent_type_data["storage"])) {
+			$parent_storage = $parent_type_data["storage"];
+		}
+
+		if ($parent_storage !== null && isset($parent_storage["table"])) {
+			$tables->items[] = (string) $parent_storage["table"];
+		}
+		for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
+			$type_name = $type_names->items[$type_index];
+			if (!isset($type_map->items[$type_name])) {
+				continue;
+			}
+			$type_data = $type_map->items[$type_name];
+			if (isset($type_data["storage"]) && isset($type_data["storage"]["table"])) {
+				$tables->items[] = (string) $type_data["storage"]["table"];
+			}
+		}
+
+		if ($property_storage !== null) {
+			if (isset($property_storage["collection"])) {
+				$out->via_collection_table = true;
+				$out->mode = "collection_table";
+				$collection_value = (string) $property_storage["collection"];
+				$collection_parts = explode(",", $collection_value);
+				if (count($collection_parts) > 0 && $collection_parts[0] !== "") {
+					$tables->items[] = (string) $collection_parts[0];
+				}
+				if (count($collection_parts) > 1 && $collection_parts[1] !== "") {
+					$columns->items[] = (string) $collection_parts[1];
+				}
+				if (count($collection_parts) > 2 && $collection_parts[2] !== "") {
+					$columns->items[] = (string) $collection_parts[2];
+				}
+			}
+			if (isset($property_storage["oneToMany"])) {
+				if ($out->mode === "unknown") {
+					$out->mode = "collection_table";
+				}
+				$columns->items[] = (string) $property_storage["oneToMany"];
+			}
+			if (isset($property_storage["manyToMany"])) {
+				$out->via_collection_table = true;
+				if ($out->mode === "unknown") {
+					$out->mode = "join_table";
+				}
+			}
+			if (isset($property_storage["column"])) {
+				$columns->items[] = (string) $property_storage["column"];
+			}
+			if (isset($property_storage["struct.ref"])) {
+				if ($out->mode === "unknown") {
+					$out->mode = "ref_column";
+				}
+			}
+			if (isset($property_storage["struct.sub"])) {
+				if ($out->mode === "unknown") {
+					$out->mode = "type_table";
+				}
+			}
+			if (isset($property_storage["struct.weakref"])) {
+				if ($out->mode === "unknown") {
+					$out->mode = "ref_column";
+				}
+			}
+		}
+
+		if ($out->mode === "unknown") {
+			if ($this->legacy_property_is_list($property_data)) {
+				$out->mode = "collection_table";
+			} else if ($this->legacy_property_targets_models($type_names, $type_map)) {
+				$out->mode = "type_table";
+			} else {
+				$out->mode = "value_column";
+			}
+		}
+
+		if (count($columns->items) <= 0) {
+			if ($out->mode === "ref_column") {
+				$columns->items[] = $property_name . "_id";
+			} else if ($out->mode === "value_column") {
+				$columns->items[] = $property_name;
+			}
+		}
+
+		$tables_box = $this->unique_strings($tables);
+		$columns_box = $this->unique_strings($columns);
+		$out->table_count = count($tables_box->items);
+		$out->column_count = count($columns_box->items);
+		$out->tables_csv = $this->join_strings($tables_box);
+		$out->columns_csv = $this->join_strings($columns_box);
+		return $out;
+	}
+
+	private function populate_mat_list(
+		\om3\base\orm\orm_node $node,
+		\om3\base\schema\model_property $property,
+		\om3\base\schema\model $parent_model,
+		?\om3\base\schema\model $target_model
+	): void
+	{
+		$probe = $this->build_temp_materialization($property, $parent_model, $target_model);
+		$item = new \om3\base\orm\orm_mat();
+		if ($property->type_name !== null && $property->type_name !== "") {
+			$item->types[] = $property->type_name;
+		}
+		$item->mode = $probe->mode;
+
+		$tables = $this->csv_to_unique_strings($probe->tables_csv);
+		$columns = $this->csv_to_unique_strings($probe->columns_csv);
+		if ($probe->mode === "collection_table" || $probe->mode === "join_table") {
+			if (count($tables->items) > 0) {
+				$item->link_table = $tables->items[0];
+			}
+			if (count($columns->items) > 0) {
+				$item->link_left = $columns->items[0];
+			}
+			if (count($columns->items) > 1) {
+				$item->link_right = $columns->items[1];
+			}
+		} else {
+			if (count($tables->items) > 0) {
+				$item->table = $tables->items[0];
+			}
+			if ($probe->mode === "ref_column") {
+				if (count($columns->items) > 0) {
+					$item->id_column = $columns->items[0];
+				}
+			} else if (count($columns->items) > 0) {
+				$item->value_column = $columns->items[0];
+			}
+		}
+
+		$node->mat[] = $item;
+		for ($type_index = 0; $type_index < count($item->types); $type_index++) {
+			$node->mat_by_type[$item->types[$type_index]] = 0;
+		}
+	}
+
+	private function populate_legacy_mat_list(
+		\om3\base\orm\orm_node $node,
+		string $property_name,
+		mixed $property_data,
+		mixed $parent_type_data,
+		mixed_hash_box $type_map,
+		string_list_box $type_names
+	): void
+	{
+		$probe = $this->build_temp_materialization_from_legacy($property_name, $property_data, $parent_type_data, $type_map, $type_names);
+		$tables = $this->csv_to_unique_strings($probe->tables_csv);
+		$property_storage = null;
+		if (isset($property_data["storage"])) {
+			$property_storage = $property_data["storage"];
+		}
+		$is_list = $this->legacy_property_is_list($property_data);
+		$targets_models = $this->legacy_property_targets_models($type_names, $type_map);
+		$collection_table = $this->legacy_collection_storage_part($property_storage, 0);
+		$collection_owner_column = $this->legacy_collection_storage_part($property_storage, 1);
+		$collection_target_column = $this->legacy_collection_storage_part($property_storage, 2);
+		$has_collection_storage = ($collection_table !== null);
+		$has_many_to_many = ($property_storage !== null && isset($property_storage["manyToMany"]));
+		$has_one_to_many = ($property_storage !== null && isset($property_storage["oneToMany"]));
+		$root_default_one_to_many = (
+			$is_list &&
+			$targets_models &&
+			!$has_collection_storage &&
+			!$has_many_to_many &&
+			!$has_one_to_many &&
+			$node->parent !== null &&
+			$node->parent->is_root
+		);
+		$legacy_column = $this->legacy_storage_string($property_storage, "column");
+		$one_to_many_owner_column = $this->legacy_storage_string($property_storage, "oneToMany");
+		$route_map /** hash<om3\base\orm\orm_mat> */ = [];
+		for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
+			$type_name = $type_names->items[$type_index];
+			$table_name = "";
+			if (isset($type_map->items[$type_name])) {
+				$type_data = $type_map->items[$type_name];
+				if (isset($type_data["storage"]) && isset($type_data["storage"]["table"])) {
+					$table_name = (string) $type_data["storage"]["table"];
+				}
+			}
+			if ($table_name === "" && count($tables->items) > 0) {
+				$table_name = $tables->items[0];
+			}
+
+			$route_key = $table_name . "|" . ($probe->mode ?? "");
+			if (!isset($route_map[$route_key])) {
+				$item = new \om3\base\orm\orm_mat();
+				if ($is_list && ($has_many_to_many || $has_collection_storage)) {
+					if ($has_many_to_many) {
+						$item->mode = "join_table";
+					} else {
+						$item->mode = "collection_table";
+					}
+					if ($collection_table !== null && $collection_table !== "") {
+						$item->link_table = $collection_table;
+					} else {
+						$item->link_table = $table_name;
+					}
+					$item->owner_column = $collection_owner_column;
+					$item->link_left = $collection_owner_column;
+					if ($targets_models) {
+						if ($collection_target_column !== null && $collection_target_column !== "") {
+							$item->id_column = $collection_target_column;
+						} else {
+							$item->id_column = "\$id";
+						}
+						$item->link_right = $item->id_column;
+					} else {
+						if ($collection_target_column !== null && $collection_target_column !== "") {
+							$item->value_column = $collection_target_column;
+						} else {
+							$item->value_column = $property_name;
+						}
+						$item->link_right = $item->value_column;
+					}
+				} else if ($is_list && ($has_one_to_many || $root_default_one_to_many)) {
+					$item->mode = "one_to_many";
+					$item->table = $table_name;
+					if ($one_to_many_owner_column !== null && $one_to_many_owner_column !== "") {
+						$item->owner_column = $one_to_many_owner_column;
+					}
+					if ($targets_models) {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->id_column = $legacy_column;
+						} else {
+							$item->id_column = "\$id";
+						}
+					} else {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->value_column = $legacy_column;
+						} else {
+							$item->value_column = $property_name;
+						}
+					}
+				} else {
+					$item->mode = $probe->mode;
+					$item->table = $table_name;
+					if ($probe->mode === "ref_column") {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->id_column = $legacy_column;
+						} else {
+							$item->id_column = "\$" . $property_name;
+						}
+					} else if ($probe->mode === "value_column") {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->value_column = $legacy_column;
+						} else {
+							$item->value_column = $property_name;
+						}
+					} else if ($targets_models) {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->id_column = $legacy_column;
+						} else {
+							$item->id_column = "\$id";
+						}
+					} else {
+						if ($legacy_column !== null && $legacy_column !== "") {
+							$item->value_column = $legacy_column;
+						} else {
+							$item->value_column = $property_name;
+						}
+					}
+				}
+				$route_map[$route_key] = $item;
+			}
+			$route_map[$route_key]->types[] = $type_name;
+		}
+
+		if (count($route_map) <= 0) {
+			$item = new \om3\base\orm\orm_mat();
+			if ($is_list && ($has_many_to_many || $has_collection_storage)) {
+				if ($has_many_to_many) {
+					$item->mode = "join_table";
+				} else {
+					$item->mode = "collection_table";
+				}
+				$item->link_table = $collection_table;
+				$item->owner_column = $collection_owner_column;
+				$item->link_left = $collection_owner_column;
+				if ($targets_models) {
+					if ($collection_target_column !== null && $collection_target_column !== "") {
+						$item->id_column = $collection_target_column;
+					} else {
+						$item->id_column = "\$id";
+					}
+					$item->link_right = $item->id_column;
+				} else {
+					if ($collection_target_column !== null && $collection_target_column !== "") {
+						$item->value_column = $collection_target_column;
+					} else {
+						$item->value_column = $property_name;
+					}
+					$item->link_right = $item->value_column;
+				}
+			} else if ($is_list && ($has_one_to_many || $root_default_one_to_many)) {
+				$item->mode = "one_to_many";
+				if (count($tables->items) > 0) {
+					$item->table = $tables->items[0];
+				}
+				if ($one_to_many_owner_column !== null && $one_to_many_owner_column !== "") {
+					$item->owner_column = $one_to_many_owner_column;
+				}
+				if ($targets_models) {
+					if ($legacy_column !== null && $legacy_column !== "") {
+						$item->id_column = $legacy_column;
+					} else {
+						$item->id_column = "\$id";
+					}
+				} else {
+					if ($legacy_column !== null && $legacy_column !== "") {
+						$item->value_column = $legacy_column;
+					} else {
+						$item->value_column = $property_name;
+					}
+				}
+			} else {
+				$item->mode = $probe->mode;
+				if (count($tables->items) > 0) {
+					$item->table = $tables->items[0];
+				}
+				if ($probe->mode === "ref_column") {
+					if ($legacy_column !== null && $legacy_column !== "") {
+						$item->id_column = $legacy_column;
+					} else {
+						$item->id_column = "\$" . $property_name;
+					}
+				} else if ($probe->mode === "value_column") {
+					if ($legacy_column !== null && $legacy_column !== "") {
+						$item->value_column = $legacy_column;
+					} else {
+						$item->value_column = $property_name;
+					}
+				}
+			}
+			for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
+				$item->types[] = $type_names->items[$type_index];
+			}
+			$route_map["default"] = $item;
+		}
+
+		$route_index /** int */ = 0;
+		foreach ($route_map as $route) {
+			if (count($route->types) > 1 && $targets_models) {
+				$route->type_column = "\$_type";
+			}
+			$node->mat[] = $route;
+			for ($type_index = 0; $type_index < count($route->types); $type_index++) {
+				$node->mat_by_type[$route->types[$type_index]] = $route_index;
+			}
+			$route_index = $route_index + 1;
+		}
+	}
+
+	private function legacy_storage_string(mixed $property_storage, string $key): ?string
+	{
+		if ($property_storage === null || !isset($property_storage[$key])) {
+			return null;
+		}
+		$value = trim((string) $property_storage[$key]);
+		if ($value === "") {
+			return null;
+		}
+		return $value;
+	}
+
+	private function legacy_collection_storage_part(mixed $property_storage, int $part_index): ?string
+	{
+		$raw = $this->legacy_storage_string($property_storage, "collection");
+		if ($raw === null) {
+			return null;
+		}
+
+		$parts = explode(",", $raw);
+		if ($part_index < 0 || $part_index >= count($parts)) {
+			return null;
+		}
+		$value = trim((string) $parts[$part_index]);
+		if ($value === "") {
+			return null;
+		}
+		return $value;
+	}
+
+	private function csv_to_unique_strings(?string $csv): string_list_box
+	{
+		$out = new string_list_box();
+		if ($csv === null || $csv === "") {
+			return $out;
+		}
+		$parts = explode(",", $csv);
+		for ($i = 0; $i < count($parts); $i++) {
+			$part = trim((string) $parts[$i]);
+			if ($part !== "") {
+				$out->items[] = $part;
+			}
+		}
+		return $this->unique_strings($out);
+	}
+
+	private function collect_node_mat_tables(\om3\base\orm\orm_node $node): string_list_box
+	{
+		$out = new string_list_box();
+		for ($i = 0; $i < count($node->mat); $i++) {
+			$item = $node->mat[$i];
+			if ($item->table !== null && $item->table !== "") {
+				$out->items[] = $item->table;
+			}
+			if ($item->link_table !== null && $item->link_table !== "") {
+				$out->items[] = $item->link_table;
+			}
+		}
+		if (count($out->items) > 0) {
+			return $this->unique_strings($out);
+		}
+		if ($node->materialization !== null) {
+			return $this->csv_to_unique_strings($node->materialization->tables_csv);
+		}
+		return $this->csv_to_unique_strings(null);
+	}
+
+	private function collect_node_mat_columns(\om3\base\orm\orm_node $node): string_list_box
+	{
+		$out = new string_list_box();
+		for ($i = 0; $i < count($node->mat); $i++) {
+			$item = $node->mat[$i];
+			if ($item->id_column !== null && $item->id_column !== "") {
+				$out->items[] = $item->id_column;
+			}
+			if ($item->value_column !== null && $item->value_column !== "") {
+				$out->items[] = $item->value_column;
+			}
+			if ($item->owner_column !== null && $item->owner_column !== "") {
+				$out->items[] = $item->owner_column;
+			}
+			if ($item->link_left !== null && $item->link_left !== "") {
+				$out->items[] = $item->link_left;
+			}
+			if ($item->link_right !== null && $item->link_right !== "") {
+				$out->items[] = $item->link_right;
+			}
+			if ($item->type_column !== null && $item->type_column !== "") {
+				$out->items[] = $item->type_column;
+			}
+		}
+		if (count($out->items) > 0) {
+			return $this->unique_strings($out);
+		}
+		if ($node->materialization !== null) {
+			return $this->csv_to_unique_strings($node->materialization->columns_csv);
+		}
+		return $this->csv_to_unique_strings(null);
+	}
+
+	private function node_uses_collection_table(\om3\base\orm\orm_node $node): bool
+	{
+		for ($i = 0; $i < count($node->mat); $i++) {
+			$item = $node->mat[$i];
+			if (($item->link_table !== null && $item->link_table !== "") || $item->mode === "collection_table" || $item->mode === "join_table") {
+				return true;
+			}
+		}
+		return ($node->materialization !== null) ? $node->materialization->via_collection_table : false;
+	}
+
+	private function unique_strings(string_list_box $items): string_list_box
+	{
+		$seen /** hash<bool> */ = [];
+		$out = new string_list_box();
+		foreach ($items->items as $item) {
+			$value /** string */ = (string) $item;
+			if ($value === "" || isset($seen[$value])) {
+				continue;
+			}
+			$seen[$value] = true;
+			$out->items[] = $value;
+		}
+		return $out;
+	}
+
+	private function join_strings(string_list_box $items): string
+	{
+		$out /** string */ = "";
+		for ($i = 0; $i < count($items->items); $i++) {
+			if ($i > 0) {
+				$out = $out . ",";
+			}
+			$out = $out . (string) $items->items[$i];
+		}
+		return $out;
+	}
+
+	private function load_legacy_type_map(string $dir): mixed_hash_box
+	{
+		$type_map = new mixed_hash_box();
+		$entries /** vector<string> */ = [];
+		$err /** error_t */;
+		if (!take($entries, $err, fs_scan($dir))) {
+			$this->errors[] = "legacy_scan_failed:" . $dir;
+			return $type_map;
+		}
+
+		for ($i = 0; $i < count($entries); $i++) {
+			$entry = $entries[$i];
+			if (!str_ends_with($entry, ".json")) {
+				continue;
+			}
+			if (str_ends_with($entry, "_.json")) {
+				continue;
+			}
+
+			$path = $dir . "/" . $entry;
+			$data = \om3\base\load\json_loader::load_json_file($path);
+			if ($data === null || !isset($data["class"])) {
+				continue;
+			}
+
+			$type_key = $this->normalize_legacy_type_name((string) $data["class"]);
+			if ($type_key === null || $type_key === "") {
+				continue;
+			}
+			$type_map->items[$type_key] = $data;
+		}
+
+		return $type_map;
+	}
+
+	private function populate_legacy_visible_properties(
+		\om3\base\orm\orm_node_base $node,
+		mixed $type_data,
+		mixed_hash_box $type_map
+	): void
+	{
+		$out /** hash<om3\base\schema\model_property> */ = [];
+		if ($type_data === null || !isset($type_data["properties"])) {
+			$node->properties = $out;
+			return;
+		}
+
+		foreach ($type_data["properties"] as $property_name => $property_data) {
+			if (!$this->legacy_property_is_materialized($property_data)) {
+				continue;
+			}
+			$property = new \om3\base\schema\model_property();
+			$property->name = $this->normalize_legacy_property_name((string) $property_name);
+			$type_names = $this->collect_legacy_property_types($property_data);
+			$property->type_list = $this->legacy_property_is_list($property_data);
+			$property->type_name = $this->resolve_common_legacy_type($type_names, $type_map);
+
+			if (isset($property_data["storage"])) {
+				$property_storage = $property_data["storage"];
+				if (isset($property_storage["struct.ref"])) {
+					$property->struct_ref = (string) $property_storage["struct.ref"];
+				}
+				if (isset($property_storage["struct.sub"])) {
+					$property->struct_sub = (bool) $property_storage["struct.sub"];
+				}
+				if (isset($property_storage["struct.weakref"])) {
+					$property->struct_weakref = (bool) $property_storage["struct.weakref"];
+				}
+			}
+
+			if ($property->struct_ref === null && !$property->struct_sub && !$property->struct_weakref && $this->legacy_property_targets_models($type_names, $type_map)) {
+				if ($property->type_list) {
+					$property->struct_sub = true;
+				} else {
+					$property->struct_ref = $property->type_name;
+				}
+			}
+
+			$out[$property->name] = $property;
+		}
+
+		$node->properties = $out;
+	}
+
+	private function legacy_property_is_materialized(mixed $property_data): bool
+	{
+		if (!isset($property_data["storage"])) {
+			return true;
+		}
+		$property_storage = $property_data["storage"];
+		if ($this->legacy_storage_flag($property_storage, "none")) {
+			return false;
+		}
+		if ($this->legacy_storage_flag($property_storage, "query")) {
+			return false;
+		}
+		return true;
+	}
+
+	private function legacy_storage_flag(mixed $storage, string $key): bool
+	{
+		if ($storage === null || !isset($storage[$key])) {
+			return false;
+		}
+		$value = $storage[$key];
+		if ($value === true || $value === false) {
+			return $value;
+		}
+		$text = strtolower(trim((string) $value));
+		return ($text === "1" || $text === "true" || $text === "yes" || $text === "on");
+	}
+
+	private function collect_legacy_property_types(mixed $property_data): string_list_box
+	{
+		$out = new string_list_box();
+		if (!isset($property_data["types"])) {
+			return $out;
+		}
+
+		$types_data = $property_data["types"];
+		if (isset($property_data["types"]["options"])) {
+			$options = $property_data["types"]["options"];
+			foreach ($options as $option_name => $option_type) {
+				$normalized = $this->normalize_legacy_type_name((string) $option_type);
+				if ($normalized === null || $normalized === "") {
+					$normalized = $this->normalize_legacy_type_name((string) $option_name);
+				}
+				if ($normalized !== null && $normalized !== "") {
+					$out->items[] = $normalized;
+				}
+			}
+			return $this->unique_strings($out);
+		}
+
+		if (isset($property_data["types"][0])) {
+			foreach ($types_data as $type_name) {
+				$normalized = $this->normalize_legacy_type_name((string) $type_name);
+				if ($normalized !== null && $normalized !== "") {
+					$out->items[] = $normalized;
+				}
+			}
+			return $this->unique_strings($out);
+		}
+
+		$normalized = $this->normalize_legacy_type_name((string) $types_data);
+		if ($normalized !== null && $normalized !== "") {
+			$out->items[] = $normalized;
+		}
+		return $out;
+	}
+
+	private function legacy_property_is_list(mixed $property_data): bool
+	{
+		if (!isset($property_data["types"])) {
+			return false;
+		}
+
+		$types_data = $property_data["types"];
+		if (isset($property_data["types"]["type"])) {
+			return ((string) $types_data["type"] === "QModelArray");
+		}
+		return false;
+	}
+
+	private function get_legacy_property_branch_kind(mixed $property_data, string_list_box $type_names, mixed_hash_box $type_map): string
+	{
+		$is_list = $this->legacy_property_is_list($property_data);
+		$targets_models = false;
+		for ($i = 0; $i < count($type_names->items); $i++) {
+			if (!$this->is_legacy_scalar_type($type_names->items[$i])) {
+				$targets_models = true;
+				break;
+			}
+		}
+
+		$property_storage = null;
+		if (isset($property_data["storage"])) {
+			$property_storage = $property_data["storage"];
+		}
+
+		if ($is_list) {
+			if ($property_storage !== null && (isset($property_storage["oneToMany"]) || isset($property_storage["manyToMany"]) || isset($property_storage["collection"]))) {
+				return "collection_ref";
+			}
+			if ($targets_models) {
+				return "collection_sub";
+			}
+			return "collection_scalar";
+		}
+
+		if ($property_storage !== null && isset($property_storage["struct.weakref"])) {
+			return "weakref";
+		}
+		if ($property_storage !== null && isset($property_storage["struct.ref"])) {
+			return "ref";
+		}
+		if ($property_storage !== null && isset($property_storage["struct.sub"])) {
+			return "sub";
+		}
+		if ($targets_models) {
+			return "ref";
+		}
+		return "scalar";
+	}
+
+	private function resolve_common_legacy_type(string_list_box $type_names, mixed_hash_box $type_map): ?string
+	{
+		if (count($type_names->items) <= 0) {
+			return null;
+		}
+		if (count($type_names->items) === 1) {
+			return $type_names->items[0];
+		}
+
+		$all_scalar = true;
+		for ($i = 0; $i < count($type_names->items); $i++) {
+			if (!$this->is_legacy_scalar_type($type_names->items[$i])) {
+				$all_scalar = false;
+				break;
+			}
+		}
+		if ($all_scalar) {
+			return "scalar";
+		}
+
+		return "qmodel";
+	}
+
+	private function build_legacy_model_stub(string $type_name): \om3\base\schema\model
+	{
+		$out = new \om3\base\schema\model();
+		$out->name = $type_name;
+		return $out;
+	}
+
+	private function normalize_legacy_type_name(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$trimmed = trim($type_name);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
+	}
+
+	private function normalize_legacy_property_name(string $property_name): string
+	{
+		return trim($property_name);
+	}
+
+	private function legacy_last_segment(string $path): string
+	{
+		$parts = explode("/", $path);
+		if (count($parts) <= 0) {
+			return $path;
+		}
+		return (string) $parts[count($parts) - 1];
+	}
+
+	private function legacy_property_targets_models(string_list_box $type_names, mixed_hash_box $type_map): bool
+	{
+		for ($i = 0; $i < count($type_names->items); $i++) {
+			$type_name = $type_names->items[$i];
+			if ($this->is_legacy_scalar_type($type_name)) {
+				continue;
+			}
+			if (isset($type_map->items[$type_name])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private function is_legacy_scalar_type(string $type_name): bool
+	{
+		$scalar_types /** hash<bool> */ = [
+			"string" => true,
+			"integer" => true,
+			"int" => true,
+			"float" => true,
+			"double" => true,
+			"bool" => true,
+			"boolean" => true,
+			"array" => true,
+			"resource" => true,
+			"mixed" => true,
+			"datetime" => true,
+			"date" => true,
+			"time" => true,
+			"file" => true,
+		];
+		return isset($scalar_types[strtolower($type_name)]);
+	}
+
+	private function infer_default_table_name(string $type_name): string
+	{
+		if ($type_name === "address") {
+			return "addresses";
+		}
+		if ($type_name === "company") {
+			return "companies";
+		}
+		$len = strlen($type_name);
+		if ($len > 1 && substr($type_name, $len - 1, 1) === "y") {
+			return substr($type_name, 0, $len - 1) . "ies";
+		}
+		return $type_name . "s";
+	}
+
+	private function clone_model(\om3\base\schema\model $source): \om3\base\schema\model
+	{
+		$out = new \om3\base\schema\model();
+		$out->name = $source->name;
+		$out->extends = $source->extends;
+		$out->abstract = $source->abstract;
+		$out->attached_storage = $source->attached_storage;
+		$out->property_count = $source->property_count;
+		foreach ($source->properties as $property_name => $typed_property) {
+			$out->properties[$property_name] = $typed_property;
+		}
+		return $out;
+	}
+
+	private function clone_property(\om3\base\schema\model_property $source): \om3\base\schema\model_property
+	{
+		$out = new \om3\base\schema\model_property();
+		$out->name = $source->name;
+		$out->type_name = $source->type_name;
+		$out->type_list = $source->type_list;
+		$out->required = $source->required;
+		$out->default = $source->default;
+		$out->struct_ref = $source->struct_ref;
+		$out->struct_sub = $source->struct_sub;
+		$out->struct_weakref = $source->struct_weakref;
+		$out->disabled = $source->disabled;
+		$out->attached_storage = $source->attached_storage;
+		$out->property_count = $source->property_count;
+		foreach ($source->properties as $property_name => $typed_property) {
+			$out->properties[(string) $property_name] = $this->clone_property($typed_property);
+		}
+		return $out;
+	}
+
+	private function merge_property(
+		\om3\base\schema\model_property $base_property,
+		\om3\base\schema\model_property $override_property
+	): \om3\base\schema\model_property
+	{
+		$out = $this->clone_property($base_property);
+
+		if ($override_property->type_name !== null && $override_property->type_name !== $base_property->type_name) {
+			$this->errors[] = "type_mutation_forbidden:" . $base_property->name;
+			return $out;
+		}
+		if ($override_property->type_list !== $base_property->type_list) {
+			$this->errors[] = "collection_mutation_forbidden:" . $base_property->name;
+			return $out;
+		}
+		if ($override_property->struct_ref !== $base_property->struct_ref) {
+			if ($override_property->struct_ref !== null || $base_property->struct_ref !== null) {
+				$this->errors[] = "structural_mutation_forbidden:" . $base_property->name;
+				return $out;
+			}
+		}
+		if ($override_property->struct_sub !== $base_property->struct_sub) {
+			$this->errors[] = "structural_mutation_forbidden:" . $base_property->name;
+			return $out;
+		}
+		if ($override_property->struct_weakref !== $base_property->struct_weakref) {
+			$this->errors[] = "structural_mutation_forbidden:" . $base_property->name;
+			return $out;
+		}
+
+		$out->required = $override_property->required || $base_property->required;
+		if ($override_property->default !== null) {
+			$out->default = $override_property->default;
+		}
+
+		if ($override_property->property_count > 0) {
+			$effective = new property_hash_result();
+
+			foreach ($base_property->properties as $property_name => $typed_property) {
+				$child_override = $this->find_child_property($override_property, (string) $property_name);
+				if ($child_override !== null && $child_override->disabled) {
+					continue;
+				}
+				if ($child_override !== null) {
+					$effective->properties[(string) $property_name] = $this->merge_property($typed_property, $child_override);
+				} else {
+					$effective->properties[(string) $property_name] = $this->clone_property($typed_property);
+				}
+				$effective->property_count = $effective->property_count + 1;
+			}
+
+			foreach ($override_property->properties as $property_name => $_typed_property_unused) {
+				$override_key /** string */ = (string) $property_name;
+				$typed_property = $override_property->properties[$override_key];
+				if ($typed_property->disabled) {
+					continue;
+				}
+				if (isset($effective->properties[$override_key])) {
+					continue;
+				}
+				$effective->properties[$override_key] = $this->clone_property($typed_property);
+				$effective->property_count = $effective->property_count + 1;
+			}
+
+			$out->properties = $effective->properties;
+			$out->property_count = $effective->property_count;
+		}
+
+		return $out;
+	}
+
+	private function find_child_property(
+		\om3\base\schema\model_property $parent_property,
+		?string $property_name
+	): ?\om3\base\schema\model_property
+	{
+		if ($property_name === null || $property_name === "") {
+			return null;
+		}
+		if (!isset($parent_property->properties[$property_name])) {
+			return null;
+		}
+		return $parent_property->properties[$property_name];
+	}
+}

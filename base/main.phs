@@ -1,7 +1,23 @@
 <?php
 declare(strict_types=1);
 
-require_once "load/json_loader.hpp";
+require_once "json_loader.hpp";
+require_once "model_assembler.hpp";
+require_once "model_validator.hpp";
+require_once "orm/node_base.hpp";
+require_once "orm/root.hpp";
+require_once "orm/node.hpp";
+require_once "orm/mat.hpp";
+require_once "orm/materialization_probe.hpp";
+require_once "orm/error.hpp";
+require_once "orm/audit_entry.hpp";
+require_once "orm/audit_result.hpp";
+require_once "db/structure_builder.hpp";
+require_once "db/database.hpp";
+require_once "db/table.hpp";
+require_once "db/column.hpp";
+require_once "db/index.hpp";
+require_once "db/reference.hpp";
 
 namespace om3\base\app;
 
@@ -19,13 +35,13 @@ if ($m === null || $s === null) {
 	$property_count = $m->property_count;
 	$storage_property_count = $s->property_count;
 	$first_property_name = "";
-	if ($property_count > 0) {
-		$first_property = $m->properties[0];
+	if (isset($m->properties["Id"])) {
+		$first_property = $m->properties["Id"];
 		$first_property_name = $first_property->name;
 	}
 	$has_attached_storage = ($m->attached_storage !== null) ? "yes" : "no";
 	$first_attached_storage = "no";
-	if ($property_count > 0 && $m->properties[0]->attached_storage !== null) {
+	if (isset($m->properties["Id"]) && $m->properties["Id"]->attached_storage !== null) {
 		$first_attached_storage = "yes";
 	}
 

@@ -1,0 +1,241 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\tools\verify_model_loader;
+
+class orm_audit_sample
+{
+	public static function run(): void
+	{
+		self::run_project(
+			"h2b",
+			"/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json",
+			"Omi\\App"
+		);
+	}
+
+	private static function run_project(string $label, string $dir, string $root_class): void
+	{
+		$assembler = new \om3\base\assemble\model_assembler();
+		$root = $assembler->build_legacy_orm_root($dir, $root_class);
+
+		echo "--orm-audit:", $label, "--\n";
+		if ($root === null) {
+			echo "orm_root_build_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		$audit = $assembler->audit_orm_root($root);
+		$db_builder = new \om3\base\db\structure_builder();
+		$db = $db_builder->build_from_orm_root($root);
+		echo "nodes=", count($root->nodes), "\n";
+		echo "multi_type=", count($audit->multi_type), "\n";
+		echo "multi_table=", count($audit->multi_table), "\n";
+		echo "multi_column=", count($audit->multi_column), "\n";
+		echo "collection_table=", count($audit->collection_table), "\n";
+		if ($db !== null) {
+			echo "schema_tables=", count($db->tables), "\n";
+			echo "--schema-sample--\n";
+			\om3\base\db\structure_builder::print_database($db);
+			echo "schema_errors=", count($db_builder->errors), "\n";
+		} else {
+			echo "schema_build_failed\n";
+			for ($error_index = 0; $error_index < count($db_builder->errors); $error_index++) {
+				echo $db_builder->errors[$error_index], "\n";
+			}
+		}
+
+		if (count($audit->multi_type) > 0) {
+			echo "--multi_type--\n";
+			for ($i = 0; $i < count($audit->multi_type); $i++) {
+				$entry = $audit->multi_type[$i];
+				echo $entry->path, "|", $entry->name, "|", $entry->count;
+				if (count($entry->values) > 0) {
+					echo "|";
+					for ($value_index = 0; $value_index < count($entry->values); $value_index++) {
+						if ($value_index > 0) {
+							echo ",";
+						}
+						echo $entry->values[$value_index];
+					}
+				}
+				echo "\n";
+			}
+		}
+
+		if (count($audit->multi_table) > 0) {
+			echo "--multi_table--\n";
+			for ($i = 0; $i < count($audit->multi_table); $i++) {
+				$entry = $audit->multi_table[$i];
+				echo $entry->path, "|", $entry->name, "|", $entry->count;
+				if (count($entry->values) > 0) {
+					echo "|";
+					for ($value_index = 0; $value_index < count($entry->values); $value_index++) {
+						if ($value_index > 0) {
+							echo ",";
+						}
+						echo $entry->values[$value_index];
+					}
+				}
+				echo "\n";
+			}
+		}
+
+		if (count($audit->multi_column) > 0) {
+			echo "--multi_column--\n";
+			for ($i = 0; $i < count($audit->multi_column); $i++) {
+				$entry = $audit->multi_column[$i];
+				echo $entry->path, "|", $entry->name, "|", $entry->count;
+				if (count($entry->values) > 0) {
+					echo "|";
+					for ($value_index = 0; $value_index < count($entry->values); $value_index++) {
+						if ($value_index > 0) {
+							echo ",";
+						}
+						echo $entry->values[$value_index];
+					}
+				}
+				echo "\n";
+			}
+		}
+
+		if (count($audit->collection_table) > 0) {
+			echo "--collection_table--\n";
+			for ($i = 0; $i < count($audit->collection_table); $i++) {
+				$entry = $audit->collection_table[$i];
+				echo $entry->path, "|", $entry->name, "|", $entry->count;
+				if (count($entry->values) > 0) {
+					echo "|";
+					for ($value_index = 0; $value_index < count($entry->values); $value_index++) {
+						if ($value_index > 0) {
+							echo ",";
+						}
+						echo $entry->values[$value_index];
+					}
+				}
+				echo "\n";
+			}
+		}
+
+		if ($label == "h2b") {
+			echo "--orm_nodes_tsv--\n";
+			echo "path\tname\tparent_path\tis_list\tis_root\tbranch_kind\n";
+			self::print_orm_nodes_tsv($root);
+			echo "--orm_mat_tsv--\n";
+			echo "node_path\tmat_index\tmode\ttable_name\tlink_table\towner_column\tid_column\tvalue_column\ttype_column\ttypes_csv\n";
+			self::print_orm_mat_tsv($root);
+			echo "--mat-debug--\n";
+			self::print_mat_debug($root, [
+				"Omi/App.Addresses",
+				"Omi/App.Users",
+				"Omi/App.Properties",
+				"Omi/App.Offers",
+			]);
+		}
+	}
+
+	private static function print_orm_nodes_tsv(\om3\base\orm\orm_root $root): void
+	{
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			echo self::tsv_field($node->path ?? ""), "\t",
+				self::tsv_field($node->name ?? ""), "\t",
+				self::tsv_field(($node->parent !== null) ? ($node->parent->path ?? "") : ""), "\t",
+				($node->is_list ? "1" : "0"), "\t",
+				($node->is_root ? "1" : "0"), "\t",
+				self::tsv_field($node->branch_kind ?? ""), "\n";
+		}
+	}
+
+	private static function print_orm_mat_tsv(\om3\base\orm\orm_root $root): void
+	{
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+				$mat = $node->mat[$mat_index];
+				echo self::tsv_field($node->path ?? ""), "\t",
+					$mat_index, "\t",
+					self::tsv_field($mat->mode ?? ""), "\t",
+					self::tsv_field($mat->table ?? ""), "\t",
+					self::tsv_field($mat->link_table ?? ""), "\t",
+					self::tsv_field($mat->owner_column ?? ""), "\t",
+					self::tsv_field($mat->id_column ?? ""), "\t",
+					self::tsv_field($mat->value_column ?? ""), "\t",
+					self::tsv_field($mat->type_column ?? ""), "\t",
+					self::tsv_field(implode(",", $mat->types)), "\n";
+			}
+		}
+	}
+
+	private static function print_generated_tables_tsv(\om3\base\db\db_database $db): void
+	{
+		foreach ($db->tables as $table_name => $_unused) {
+			$table_key = (string) $table_name;
+			$table = $db->tables[$table_key];
+			echo self::tsv_field($table->name ?? ""), "\n";
+		}
+	}
+
+	private static function print_generated_columns_tsv(\om3\base\db\db_database $db): void
+	{
+		foreach ($db->tables as $table_name => $_unused_table) {
+			$table_key = (string) $table_name;
+			$table = $db->tables[$table_key];
+			foreach ($table->columns as $column_name => $_unused_column) {
+				$column_key = (string) $column_name;
+				$column = $table->columns[$column_key];
+				echo self::tsv_field($table->name ?? ""), "\t",
+					self::tsv_field($column->name ?? ""), "\t",
+					self::tsv_field($column->type ?? ""), "\t",
+					($column->is_nullable ? "1" : "0"), "\t",
+					($column->auto_increment ? "1" : "0"), "\n";
+			}
+		}
+	}
+
+	private static function tsv_field(string $value): string
+	{
+		return str_replace(["\t", "\r", "\n"], [" ", " ", " "], $value);
+	}
+
+	private static function print_mat_debug(\om3\base\orm\orm_root $root, array $paths): void
+	{
+		$target_paths = [];
+		for ($i = 0; $i < count($paths); $i++) {
+			$target_paths[(string) $paths[$i]] = true;
+		}
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			if ($node->path === null || !isset($target_paths[$node->path])) {
+				continue;
+			}
+
+			echo "node:", $node->path, "\n";
+			for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+				$mat = $node->mat[$mat_index];
+				echo "mat:", $mat_index,
+					"|mode=", ($mat->mode ?? ""),
+					"|table=", ($mat->table ?? ""),
+					"|link_table=", ($mat->link_table ?? ""),
+					"|owner_column=", ($mat->owner_column ?? ""),
+					"|id_column=", ($mat->id_column ?? ""),
+					"|value_column=", ($mat->value_column ?? ""),
+					"|type_column=", ($mat->type_column ?? "");
+				if (count($mat->types) > 0) {
+					echo "|types=";
+					for ($type_index = 0; $type_index < count($mat->types); $type_index++) {
+						if ($type_index > 0) {
+							echo ",";
+						}
+						echo $mat->types[$type_index];
+					}
+				}
+				echo "\n";
+			}
+		}
+	}
+}

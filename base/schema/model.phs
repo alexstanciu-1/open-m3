@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 namespace om3\base\schema;
 
+/** @lib-export */
 class model
 {
 	public ?string $name = null;
 	public ?string $extends = null;
 	public bool $abstract = false;
 	public int $property_count = 0;
-	public $properties /** vector<model_property> */ = [];
+	public $properties /** hash<model_property> */ = [];
 	public ?storage $attached_storage = null;
 }

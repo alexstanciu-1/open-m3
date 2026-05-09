@@ -1,0 +1,125 @@
+<?php
+declare(strict_types=1);
+
+require_once "model_assembler.hpp";
+
+namespace om3\base\assemble;
+
+/** @lib-export */
+class model_validator
+{
+	public $errors /** vector<string> */ = [];
+
+	public function validate_assembler(model_assembler $assembler): void
+	{
+		$known_types /** hash<bool> */ = [];
+		for ($index = 0; $index < count($assembler->raw_models); $index++) {
+			$entry = $assembler->raw_models[$index];
+			if ($entry->key === null || $entry->key === "") {
+				$this->errors[] = "missing_type_key_at_index:" . (string) $index;
+				continue;
+			}
+
+			if (isset($known_types[$entry->key])) {
+				$this->errors[] = "duplicate_type_key:" . $entry->key;
+			} else {
+				$known_types[$entry->key] = true;
+			}
+
+			if ($entry->model === null) {
+				$this->errors[] = "missing_model_for_type:" . $entry->key;
+			}
+		}
+
+		for ($index = 0; $index < count($assembler->raw_models); $index++) {
+			$entry = $assembler->raw_models[$index];
+			if ($entry->key === null || $entry->key === "" || $entry->model === null) {
+				continue;
+			}
+
+			$model_name /** string */ = (string) $entry->key;
+			if ($entry->model->extends !== null && $entry->model->extends !== "") {
+				$extends_type /** string */ = (string) $entry->model->extends;
+				if (!$this->is_known_type($extends_type, $known_types)) {
+					$this->errors[] = "missing_extends_type:" . $model_name . ":" . $extends_type;
+				}
+			}
+
+			$this->validate_model_properties($model_name, $entry->model, $known_types);
+		}
+	}
+
+	private function validate_model_properties(
+		string $owner_path,
+		\om3\base\schema\model $model,
+		$known_types /** hash<bool> */
+	): void
+	{
+		foreach ($model->properties as $property_name => $property) {
+			$property_key /** string */ = (string) $property_name;
+			$property = $model->properties[$property_key];
+			$this->validate_property($owner_path, $property_key, $property, $known_types);
+		}
+	}
+
+	private function validate_property(
+		string $owner_path,
+		string $property_key,
+		\om3\base\schema\model_property $property,
+		$known_types /** hash<bool> */
+	): void
+	{
+			$property_path = $owner_path . "." . $property_key;
+
+			if ($property->type_name !== null && $property->type_name !== "") {
+				$property_type /** string */ = (string) $property->type_name;
+				if (!$this->is_known_type($property_type, $known_types)) {
+					$this->errors[] = "missing_property_type:" . $property_path . ":" . $property_type;
+				}
+			}
+
+			if ($property->property_count > 0) {
+				foreach ($property->properties as $child_name => $child_property) {
+					$child_key /** string */ = (string) $child_name;
+					$child_property = $property->properties[$child_key];
+					$this->validate_property($property_path, $child_key, $child_property, $known_types);
+				}
+			}
+	}
+
+	private function is_known_type(string $type_name, $known_types /** hash<bool> */): bool
+	{
+		if (isset($known_types[$type_name])) {
+			return true;
+		}
+
+		if ($this->is_builtin_type($type_name)) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private function is_builtin_type(string $type_name): bool
+	{
+		return
+			($type_name == "string") ||
+			($type_name == "int") ||
+			($type_name == "integer") ||
+			($type_name == "float") ||
+			($type_name == "double") ||
+			($type_name == "bool") ||
+			($type_name == "boolean") ||
+			($type_name == "date") ||
+			($type_name == "datetime") ||
+			($type_name == "time") ||
+			($type_name == "array") ||
+			($type_name == "scalar") ||
+			($type_name == "file") ||
+			($type_name == "mixed") ||
+			($type_name == "QModel") ||
+			($type_name == "QViewBase") ||
+			($type_name == "QUserGroup") ||
+			($type_name == "QUser_frame_");
+	}
+}

@@ -1,0 +1,15 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\orm;
+
+/** @lib-export */
+class orm_materialization_probe
+{
+	public ?string $mode = null;
+	public bool $via_collection_table = false;
+	public int $table_count = 0;
+	public int $column_count = 0;
+	public ?string $tables_csv = null;
+	public ?string $columns_csv = null;
+}

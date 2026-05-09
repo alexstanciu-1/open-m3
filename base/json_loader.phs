@@ -8,6 +8,7 @@ require_once "schema/storage_property.hpp";
 
 namespace om3\base\load;
 
+/** @lib-export */
 class json_loader
 {
 	public static function load_json_file(string $path): mixed
@@ -40,7 +41,7 @@ class json_loader
 
 		if (isset($data["properties"])) {
 			foreach ($data["properties"] as $property_name => $property_data) {
-				$out->properties[] = self::load_model_property($property_name, $property_data);
+				$out->properties[(string) $property_name] = self::load_model_property($property_name, $property_data);
 				$out->property_count = $out->property_count + 1;
 			}
 		}
@@ -74,7 +75,7 @@ class json_loader
 
 		if (isset($data["properties"])) {
 			foreach ($data["properties"] as $property_name => $property_data) {
-				$out->properties[] = self::load_storage_property($property_name, $property_data);
+				$out->properties[(string) $property_name] = self::load_storage_property($property_name, $property_data);
 				$out->property_count = $out->property_count + 1;
 			}
 		}
@@ -87,11 +88,12 @@ class json_loader
 		$model_def->attached_storage = $storage_def;
 		$storage_def->owner_model = $model_def;
 
-		for ($i = 0; $i < $model_def->property_count; $i++) {
-			$model_property_def = $model_def->properties[$i];
-			$storage_property_def = self::find_storage_property($storage_def, $model_property_def->name);
+		foreach ($model_def->properties as $property_name => $model_property_def) {
+			$property_key /** string */ = (string) $property_name;
+			$typed_model_property = $model_def->properties[$property_key];
+			$storage_property_def = self::find_storage_property($storage_def, $property_key);
 			if ($storage_property_def !== null) {
-				$model_property_def->attached_storage = $storage_property_def;
+				$typed_model_property->attached_storage = $storage_property_def;
 				$storage_property_def->owner_property = $model_property_def;
 			}
 		}
@@ -125,6 +127,15 @@ class json_loader
 		}
 		if (isset($property_data["struct.weakref"])) {
 			$out->struct_weakref = (bool) $property_data["struct.weakref"];
+		}
+		if (isset($property_data["disabled"])) {
+			$out->disabled = (bool) $property_data["disabled"];
+		}
+		if (isset($property_data["properties"])) {
+			foreach ($property_data["properties"] as $child_property_name => $child_property_data) {
+				$out->properties[(string) $child_property_name] = self::load_model_property($child_property_name, $child_property_data);
+				$out->property_count = $out->property_count + 1;
+			}
 		}
 
 		return $out;
@@ -178,11 +189,8 @@ class json_loader
 		if ($property_name === null || $property_name === "") {
 			return null;
 		}
-		for ($i = 0; $i < $storage_def->property_count; $i++) {
-			$property = $storage_def->properties[$i];
-			if ($property->column == $property_name) {
-				return $property;
-			}
+		if (isset($storage_def->properties[$property_name])) {
+			return $storage_def->properties[$property_name];
 		}
 
 		return null;

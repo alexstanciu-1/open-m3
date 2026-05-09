@@ -1,0 +1,13 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\db;
+
+/** @lib-export */
+class db_database
+{
+	public ?string $name = null;
+	public ?string $charset = null;
+	public ?string $collation = null;
+	public $tables /** hash<db_table> */ = [];
+}

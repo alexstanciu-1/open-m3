@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace om3\base\schema;
 
+/** @lib-export */
 class storage_property
 {
 	public ?string $kind = null;

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace om3\base\schema;
 
+/** @lib-export */
 class storage
 {
 	public ?string $table = null;
@@ -13,5 +14,5 @@ class storage
 	public mixed $indexes = null;
 	public int $property_count = 0;
 	public ?model $owner_model = null;
-	public $properties /** vector<storage_property> */ = [];
+	public $properties /** hash<storage_property> */ = [];
 }

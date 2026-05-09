@@ -1,0 +1,22 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\db;
+
+/** @lib-export */
+class db_column
+{
+	public ?db_table $parent_table = null;
+	public ?string $name = null;
+	public ?string $type = null;
+	public ?string $length = null;
+	public ?string $values = null;
+	public mixed $default_value = null;
+	public ?string $charset = null;
+	public ?string $collation = null;
+	public bool $unsigned = false;
+	public bool $is_nullable = true;
+	public bool $auto_increment = false;
+	public bool $compressed = false;
+	public ?string $comment = null;
+}

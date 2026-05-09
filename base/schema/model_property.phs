@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace om3\base\schema;
 
+/** @lib-export */
 class model_property
 {
 	public ?string $name = null;
@@ -13,5 +14,8 @@ class model_property
 	public ?string $struct_ref = null;
 	public bool $struct_sub = false;
 	public bool $struct_weakref = false;
+	public bool $disabled = false;
+	public int $property_count = 0;
+	public $properties /** hash<model_property> */ = [];
 	public ?storage_property $attached_storage = null;
 }

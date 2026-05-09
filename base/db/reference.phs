@@ -1,0 +1,18 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\db;
+
+/** @lib-export */
+class db_reference
+{
+	public ?db_table $parent_table = null;
+	public ?string $name = null;
+	public ?string $target_database = null;
+	public ?string $target_table = null;
+	public $columns /** vector<string> */ = [];
+	public $target_columns /** vector<string> */ = [];
+	public ?string $on_delete = null;
+	public ?string $on_update = null;
+	public ?string $using_index = null;
+}

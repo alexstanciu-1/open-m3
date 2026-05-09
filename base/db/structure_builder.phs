@@ -1,0 +1,794 @@
+<?php
+declare(strict_types=1);
+
+require_once "../schema/model.hpp";
+require_once "../schema/model_property.hpp";
+require_once "../model_assembler.hpp";
+require_once "../orm/root.hpp";
+require_once "../orm/node.hpp";
+require_once "database.hpp";
+require_once "table.hpp";
+require_once "column.hpp";
+require_once "index.hpp";
+
+namespace om3\base\db;
+
+class db_build_entry
+{
+	public ?string $path = null;
+	public ?string $type_key = null;
+	public ?string $table_name = null;
+	public ?string $parent_table_name = null;
+	public ?\om3\base\schema\model $effective_model = null;
+	public ?\om3\base\schema\model_property $usage_property = null;
+}
+
+class db_sub_materialization
+{
+	public ?string $mode = null;
+	public ?string $table_name = null;
+}
+
+/** @lib-export */
+class structure_builder
+{
+	public $errors /** vector<string> */ = [];
+	public bool $legacy_full_support = false;
+	private $orm_primary_tables /** hash<string> */ = [];
+	private $orm_suppressed_tables /** hash<string> */ = [];
+
+	public function build_from_root(
+		\om3\base\assemble\model_assembler $assembler,
+		string $root_path,
+		string $root_type_key
+	): ?db_database
+	{
+		$root_model = $assembler->assemble_path($root_path, $root_type_key);
+		if ($root_model === null) {
+			$this->errors[] = "missing_root_model:" . $root_type_key;
+			return null;
+		}
+
+		$db = new db_database();
+		$db->name = "default";
+
+		$current_level /** vector<db_build_entry> */ = [];
+		$root_entry = new db_build_entry();
+		$root_entry->path = $root_path;
+		$root_entry->type_key = $root_type_key;
+		$root_entry->table_name = $this->path_to_table_name($root_path);
+		$root_entry->effective_model = $root_model;
+		$current_level[] = $root_entry;
+
+		$depth /** int */ = 0;
+		while ((count($current_level) > 0) && ($depth < 16)) {
+			$next_level /** vector<db_build_entry> */ = [];
+
+			foreach ($current_level as $entry) {
+				if ($entry->path === null || $entry->table_name === null || $entry->effective_model === null) {
+					continue;
+				}
+
+				$table = $this->ensure_table($db, $entry->table_name);
+				$this->ensure_id_column($table);
+
+				if ($entry->parent_table_name !== null) {
+					$this->ensure_parent_ref_column($table, $entry->parent_table_name);
+				}
+
+				foreach ($entry->effective_model->properties as $property_name => $_property_unused) {
+					$property_key /** string */ = (string) $property_name;
+					$property = $entry->effective_model->properties[$property_key];
+					$usage_override = $this->find_child_property_override($entry->usage_property, $property_key);
+					$planning_property = ($usage_override !== null) ? $usage_override : $property;
+
+					if ($planning_property->type_name === null || $planning_property->type_name === "") {
+						continue;
+					}
+
+					if ($planning_property->struct_sub) {
+						$child_path = $entry->path . "." . $property_key;
+						$child_model = $assembler->assemble_path($child_path, $planning_property->type_name);
+						if ($child_model === null) {
+							$this->errors[] = "child_assemble_failed:" . $child_path;
+							continue;
+						}
+
+						$materialization = $this->resolve_sub_materialization($planning_property, $planning_property->type_name, $child_model, $child_path);
+						if ($materialization->mode == "inline") {
+							$inline_model = ($planning_property->property_count > 0)
+								? $assembler->refine_sub_path($child_path, $planning_property->type_name, $planning_property)
+								: $child_model;
+							if ($inline_model === null) {
+								$this->errors[] = "inline_child_assemble_failed:" . $child_path;
+								continue;
+							}
+							$this->inline_sub_columns($table, $property_key, $inline_model);
+						} else {
+							$child_entry = new db_build_entry();
+							$child_entry->path = $child_path;
+							$child_entry->type_key = $planning_property->type_name;
+							$child_entry->table_name = $materialization->table_name;
+							$child_entry->parent_table_name = $entry->table_name;
+							$child_entry->effective_model = ($planning_property->property_count > 0)
+								? ($assembler->refine_sub_path($child_path, $planning_property->type_name, $planning_property) ?? $child_model)
+								: $child_model;
+							$child_entry->usage_property = $planning_property;
+							$next_level[] = $child_entry;
+						}
+						continue;
+					}
+
+					if ($planning_property->struct_ref !== null) {
+						$this->ensure_ref_column($table, $property_key);
+						continue;
+					}
+
+					$this->ensure_scalar_column($table, $property_key, $planning_property->type_name, $planning_property->required);
+				}
+			}
+
+			$current_level = $next_level;
+			$depth = $depth + 1;
+		}
+
+		if ($depth >= 16 && count($current_level) > 0) {
+			$this->errors[] = "depth_limit_reached";
+		}
+
+		return $db;
+	}
+
+	public function build_from_orm_root(
+		\om3\base\orm\orm_root $root
+	): ?db_database
+	{
+		$this->legacy_full_support = true;
+		$empty_primary_tables /** hash<string> */ = [];
+		$this->orm_primary_tables = $empty_primary_tables;
+		$empty_suppressed_tables /** hash<string> */ = [];
+		$this->orm_suppressed_tables = $empty_suppressed_tables;
+		$db = new db_database();
+		$db->name = "default";
+
+		$root_table_name = $this->resolve_orm_root_table_name($root);
+		if ($root_table_name === null || $root_table_name === "") {
+			$this->errors[] = "missing_orm_root_table";
+			return null;
+		}
+
+		$root_table = $this->ensure_table($db, $root_table_name);
+		$this->ensure_id_column($root_table);
+		if ($root->path !== null) {
+			$this->orm_primary_tables[$root->path] = $root_table_name;
+		}
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			$primary_table = $this->resolve_node_primary_table_name($node);
+			if ($primary_table !== null && $node->path !== null) {
+				$this->orm_primary_tables[$node->path] = $primary_table;
+			}
+		}
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			$this->reserve_redundant_root_helper_tables($root_table_name, $node);
+		}
+
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			$this->apply_orm_node_materialization($db, $root->path ?? "", $root_table_name, $node);
+		}
+
+		return $db;
+	}
+
+	public static function print_database(db_database $db): void
+	{
+		echo "database:", $db->name ?? "", "\n";
+		foreach ($db->tables as $table_name => $_table_unused) {
+			$table_key /** string */ = (string) $table_name;
+			$table = $db->tables[$table_key];
+			echo "table:", $table->name ?? "", "\n";
+
+			foreach ($table->columns as $column_name => $_column_unused) {
+				$column_key /** string */ = (string) $column_name;
+				$column = $table->columns[$column_key];
+				echo "column:", $table->name ?? "", ".", $column->name ?? "", ":", $column->type ?? "";
+				if (!$column->is_nullable) {
+					echo ":notnull";
+				}
+				if ($column->auto_increment) {
+					echo ":autoincrement";
+				}
+				echo "\n";
+			}
+
+			foreach ($table->indexes as $index_name => $_index_unused) {
+				$index_key /** string */ = (string) $index_name;
+				$index = $table->indexes[$index_key];
+				echo "index:", $table->name ?? "", ".", $index->name ?? "", ":", $index->kind ?? "";
+				if (count($index->columns) > 0) {
+					echo ":";
+					$first = true;
+					foreach ($index->columns as $column_name) {
+						if (!$first) {
+							echo ",";
+						}
+						echo $column_name;
+						$first = false;
+					}
+				}
+				echo "\n";
+			}
+		}
+	}
+
+	private function ensure_table(db_database $db, string $table_name): db_table
+	{
+		if (isset($db->tables[$table_name])) {
+			return $db->tables[$table_name];
+		}
+
+		$table = new db_table();
+		$table->name = $table_name;
+		$table->parent_database = $db;
+		$table->engine = "innodb";
+		$table->charset = "utf8";
+		$table->collation = "utf8_unicode_ci";
+		$db->tables[$table_name] = $table;
+		return $table;
+	}
+
+	private function ensure_id_column(db_table $table): void
+	{
+		$column_name = $this->legacy_full_support ? "\$id" : "id";
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = "int";
+		$column->unsigned = true;
+		$column->is_nullable = false;
+		$column->auto_increment = true;
+		$table->columns[$column_name] = $column;
+
+		$index = new db_index();
+		$index->parent_table = $table;
+		$index->name = "primary";
+		$index->kind = "primary";
+		$index->columns[] = $column_name;
+		$table->indexes["primary"] = $index;
+	}
+
+	private function ensure_parent_ref_column(db_table $table, string $parent_table_name): void
+	{
+		$column_name = $this->legacy_full_support ? $this->legacy_owner_column_name($parent_table_name, $table->name ?? "") : ($parent_table_name . "_id");
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = "int";
+		$column->unsigned = true;
+		$column->is_nullable = false;
+		$table->columns[$column_name] = $column;
+
+		$index = new db_index();
+		$index->parent_table = $table;
+		$index->name = $column_name;
+		$index->kind = "normal";
+		$index->columns[] = $column_name;
+		$table->indexes[$column_name] = $index;
+	}
+
+	private function ensure_ref_column(db_table $table, string $property_name): void
+	{
+		$column_name = $this->normalize_name($property_name) . "_id";
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = "int";
+		$column->unsigned = true;
+		$table->columns[$column_name] = $column;
+
+		$index = new db_index();
+		$index->parent_table = $table;
+		$index->name = $column_name;
+		$index->kind = "normal";
+		$index->columns[] = $column_name;
+		$table->indexes[$column_name] = $index;
+	}
+
+	private function ensure_named_ref_column(db_table $table, string $column_name, bool $required): void
+	{
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = "int";
+		$column->unsigned = true;
+		$column->is_nullable = !$required;
+		$table->columns[$column_name] = $column;
+
+		$index = new db_index();
+		$index->parent_table = $table;
+		$index->name = $column_name;
+		$index->kind = "normal";
+		$index->columns[] = $column_name;
+		$table->indexes[$column_name] = $index;
+	}
+
+	private function ensure_type_column(db_table $table, string $column_name): void
+	{
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = "smallint";
+		$column->unsigned = true;
+		$table->columns[$column_name] = $column;
+	}
+
+	private function ensure_scalar_column(db_table $table, string $property_name, string $type_name, bool $required): void
+	{
+		$column_name = $this->legacy_full_support ? $this->normalize_legacy_db_name($property_name) : $this->normalize_name($property_name);
+		if ($this->legacy_full_support && (strtolower($column_name) == "id" || strtolower($column_name) == "\$id")) {
+			return;
+		}
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new db_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+		$column->type = $this->map_scalar_type($type_name);
+		$column->is_nullable = !$required;
+		$table->columns[$column_name] = $column;
+	}
+
+	private function inline_sub_columns(db_table $table, string $property_name, \om3\base\schema\model $child_model): void
+	{
+		foreach ($child_model->properties as $child_property_name => $_child_unused) {
+			$child_key /** string */ = (string) $child_property_name;
+			$child_property = $child_model->properties[$child_key];
+			if ($child_property->type_name === null || $child_property->type_name === "") {
+				continue;
+			}
+			if ($child_property->struct_sub) {
+				continue;
+			}
+			if ($child_property->struct_ref !== null) {
+				$this->ensure_ref_column($table, $property_name . "_" . $child_key);
+				continue;
+			}
+			$this->ensure_scalar_column($table, $property_name . "_" . $child_key, $child_property->type_name, $child_property->required);
+		}
+	}
+
+	private function resolve_sub_materialization(
+		\om3\base\schema\model_property $property,
+		string $type_key,
+		\om3\base\schema\model $child_model,
+		string $child_path
+	): db_sub_materialization
+	{
+		$out = new db_sub_materialization();
+
+		$attached = $property->attached_storage;
+		if ($attached !== null) {
+			if ($attached->kind !== null && $attached->kind == "inline") {
+				$out->mode = "inline";
+				return $out;
+			}
+			if ($attached->relation_table !== null && $attached->relation_table !== "") {
+				$out->mode = "table";
+				$out->table_name = $this->normalize_name($attached->relation_table);
+				return $out;
+			}
+		}
+
+		$default_table = $this->resolve_default_type_table_name($type_key, $child_model);
+		if ($default_table !== null && $default_table !== "") {
+			$out->mode = "table";
+			$out->table_name = $default_table;
+			return $out;
+		}
+
+		$out->mode = "table";
+		$out->table_name = $this->path_to_table_name($child_path);
+		return $out;
+	}
+
+	private function resolve_default_type_table_name(string $type_key, \om3\base\schema\model $model): ?string
+	{
+		$model_storage = $model->attached_storage;
+		if ($model_storage !== null) {
+			$model_table = $model_storage->table;
+			if ($model_table !== null && $model_table !== "") {
+				return $this->normalize_name($model_table);
+			}
+		}
+
+		$type_name = $this->normalize_name($type_key);
+		if ($type_name === "") {
+			return null;
+		}
+
+		if ($type_name == "address") {
+			return "addresses";
+		}
+		if ($type_name == "company") {
+			return "companies";
+		}
+		return $type_name . "s";
+	}
+
+	private function map_scalar_type(string $type_name): string
+	{
+		$type_key = strtolower($type_name);
+		if (($type_key == "int") || ($type_key == "integer")) {
+			return "int";
+		}
+		if (($type_key == "bool") || ($type_key == "boolean")) {
+			return "bool";
+		}
+		return "varchar";
+	}
+
+	private function path_to_table_name(string $path): string
+	{
+		return $this->normalize_name($path);
+	}
+
+	private function normalize_name(string $name): string
+	{
+		$out = strtolower($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		return $out;
+	}
+
+	private function normalize_legacy_db_name(string $name): string
+	{
+		$out = trim($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		$out = str_replace("$", "", $out);
+		while (strpos($out, "__") !== false) {
+			$out = str_replace("__", "_", $out);
+		}
+		if (str_starts_with($out, "_")) {
+			$out = substr($out, 1);
+		}
+		return $out;
+	}
+
+	private function normalize_legacy_column_name(string $name): string
+	{
+		$out = trim($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		while (strpos($out, "__") !== false) {
+			$out = str_replace("__", "_", $out);
+		}
+		return $out;
+	}
+
+	private function resolve_orm_root_table_name(\om3\base\orm\orm_root $root): ?string
+	{
+		$path = $root->path;
+		if ($path === null || $path === "") {
+			return null;
+		}
+		$parts = explode("/", $path);
+		if (count($parts) <= 0) {
+			return $this->legacy_full_support ? ("$" . $this->normalize_legacy_db_name($path)) : $this->normalize_legacy_db_name($path);
+		}
+		$last = (string) $parts[count($parts) - 1];
+		return $this->legacy_full_support ? ("$" . $this->normalize_legacy_db_name($last)) : $this->normalize_legacy_db_name($last);
+	}
+
+	private function apply_orm_node_materialization(
+		db_database $db,
+		string $root_path,
+		string $root_table_name,
+		\om3\base\orm\orm_node $node
+	): void
+	{
+		if (count($node->mat) <= 0 || $node->name === null) {
+			return;
+		}
+
+		for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+			$mat = $node->mat[$mat_index];
+			$mode = $mat->mode ?? "";
+			if ($mode === "collection_table" || $mode === "join_table") {
+				$parent_table_name = $this->resolve_parent_primary_table_name($node);
+				if ($this->is_redundant_root_self_branch($node, $root_path)) {
+					continue;
+				}
+				$uses_synthetic_helper = (
+					$this->legacy_full_support &&
+					$mat->link_table === null &&
+					$parent_table_name !== null &&
+					$node->parent !== null &&
+					!$node->parent->is_root
+				);
+				$link_table_raw_name = ($mat->link_table !== null && $mat->link_table !== "")
+					? $mat->link_table
+					: (($uses_synthetic_helper && $node->name !== null)
+						? $this->legacy_collection_child_table_name($parent_table_name ?? "", $node->name)
+						: $mat->table);
+				$link_table_name = $this->resolve_legacy_mat_table_name($node, $link_table_raw_name, true);
+				if ($this->should_skip_suppressed_table($link_table_name)) {
+					continue;
+				}
+				$link_table = $this->ensure_table($db, $link_table_name);
+				$this->ensure_id_column($link_table);
+				if ($mat->owner_column !== null && $mat->owner_column !== "") {
+					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->owner_column), true);
+				} else if ($mat->link_left !== null && $mat->link_left !== "") {
+					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->link_left), true);
+				} else if ($uses_synthetic_helper && $parent_table_name !== null) {
+					$this->ensure_named_ref_column($link_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
+				} else {
+					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $node->name), true);
+				}
+				if ($uses_synthetic_helper && $mat->id_column !== null && $mat->id_column !== "") {
+					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name("$" . $node->name), false);
+				} else if ($mat->id_column !== null && $mat->id_column !== "") {
+					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->id_column), false);
+				} else if ($mat->value_column !== null && $mat->value_column !== "") {
+					$this->ensure_scalar_column($link_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+				}
+				if ($mat->type_column !== null && $mat->type_column !== "") {
+					$this->ensure_type_column($link_table, $this->normalize_legacy_column_name($mat->type_column));
+				}
+				continue;
+			}
+
+			$table_name = $mat->table;
+			if ($table_name === null || $table_name === "") {
+				continue;
+			}
+			$parent_table_name = $this->resolve_parent_primary_table_name($node);
+			if ($this->is_redundant_root_self_branch($node, $root_path)) {
+				continue;
+			}
+			$uses_synthetic_helper = (
+				$this->legacy_full_support &&
+				$node->is_list &&
+				$parent_table_name !== null &&
+				$node->parent !== null &&
+				!$node->parent->is_root &&
+				($mode === "value_column" || $mode === "ref_column")
+			);
+			if ($uses_synthetic_helper && $node->name !== null) {
+				$helper_table_name = $this->legacy_collection_child_table_name($parent_table_name, $node->name);
+				if ($this->should_skip_suppressed_table($helper_table_name)) {
+					continue;
+				}
+				$helper_table = $this->ensure_table($db, $helper_table_name);
+				$this->ensure_id_column($helper_table);
+				$this->ensure_named_ref_column($helper_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
+				if ($mode === "ref_column") {
+					$this->ensure_named_ref_column($helper_table, $this->normalize_legacy_column_name("$" . $node->name), false);
+				} else if ($mat->value_column !== null && $mat->value_column !== "") {
+					$this->ensure_scalar_column($helper_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+				} else {
+					$this->ensure_scalar_column($helper_table, $node->name, "string", false);
+				}
+				if ($mat->type_column !== null && $mat->type_column !== "") {
+					$this->ensure_type_column($helper_table, $this->normalize_legacy_column_name($mat->type_column));
+				}
+				continue;
+			}
+			$target_table_name = $this->resolve_legacy_mat_table_name($node, $table_name, false);
+			if ($this->should_skip_suppressed_table($target_table_name)) {
+				continue;
+			}
+			$target_table = $this->ensure_table($db, $target_table_name);
+			$this->ensure_id_column($target_table);
+
+			if ($mode === "one_to_many") {
+				if ($mat->owner_column !== null && $mat->owner_column !== "") {
+					$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->owner_column), false);
+				} else {
+					$this->ensure_parent_ref_column($target_table, $root_table_name);
+				}
+			}
+
+			if ($mode === "ref_column") {
+				if ($mat->id_column !== null && $mat->id_column !== "") {
+					$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->id_column), false);
+				} else {
+					$this->ensure_ref_column($target_table, $node->name);
+				}
+				if ($mat->type_column !== null && $mat->type_column !== "") {
+					$this->ensure_type_column($target_table, $this->normalize_legacy_column_name($mat->type_column));
+				}
+				continue;
+			}
+
+			if ($mode === "value_column") {
+				if ($mat->value_column !== null && $mat->value_column !== "") {
+					$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+				} else {
+					$this->ensure_scalar_column($target_table, $node->name, "string", false);
+				}
+				continue;
+			}
+
+			if ($mat->id_column !== null && $mat->id_column !== "") {
+				$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->id_column), false);
+			}
+			if ($mat->value_column !== null && $mat->value_column !== "") {
+				$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+			}
+			if ($mat->type_column !== null && $mat->type_column !== "") {
+				$this->ensure_type_column($target_table, $this->normalize_legacy_column_name($mat->type_column));
+			}
+		}
+	}
+
+	private function resolve_node_primary_table_name(\om3\base\orm\orm_node $node): ?string
+	{
+		if (count($node->mat) <= 0) {
+			return null;
+		}
+		$mat = $node->mat[0];
+		if ($mat->table !== null && $mat->table !== "") {
+			return $this->resolve_legacy_mat_table_name($node, $mat->table, false);
+		}
+		if ($mat->link_table !== null && $mat->link_table !== "") {
+			return $this->resolve_legacy_mat_table_name($node, $mat->link_table, true);
+		}
+		return null;
+	}
+
+	private function is_redundant_root_self_branch(
+		\om3\base\orm\orm_node $node,
+		string $root_path
+	): bool
+	{
+		if (!$this->legacy_full_support || $root_path === "") {
+			return false;
+		}
+		if ($node->path === null || $node->name === null) {
+			return false;
+		}
+		$root_path_parts = explode("/", $root_path);
+		if (count($root_path_parts) <= 0) {
+			return false;
+		}
+		$root_name = (string) $root_path_parts[count($root_path_parts) - 1];
+		$self_branch_prefix = $root_path . "." . $root_name . ".";
+		return str_starts_with($node->path, $self_branch_prefix);
+	}
+
+	private function resolve_legacy_mat_table_name(\om3\base\orm\orm_node $node, ?string $raw_name, bool $is_link_table): string
+	{
+		$base = ($raw_name !== null && $raw_name !== "") ? $raw_name : ($node->name ?? "unknown");
+		$name = $this->normalize_legacy_db_name($base);
+		if (!$this->legacy_full_support) {
+			return $name;
+		}
+
+		$parent_table = $this->resolve_parent_primary_table_name($node);
+		$has_grandparent = ($node->parent !== null && $node->parent->parent !== null);
+		if ($parent_table !== null && $has_grandparent && $node->name !== null) {
+			$normalized_node_name = $this->normalize_legacy_db_name($node->name);
+			if ($name === $normalized_node_name) {
+				return $this->legacy_child_table_name($parent_table, $normalized_node_name);
+			}
+		}
+
+		if ($is_link_table && $base !== "" && substr($base, 0, 1) === "$") {
+			return $base;
+		}
+		if (!$is_link_table && $parent_table === null && $base !== "" && substr($base, 0, 1) !== "$" && $node->is_list) {
+			return "$" . $name;
+		}
+		return $base;
+	}
+
+	private function resolve_parent_primary_table_name(\om3\base\orm\orm_node $node): ?string
+	{
+		$parent = $node->parent;
+		if ($parent === null || $parent->path === null) {
+			return null;
+		}
+		if (isset($this->orm_primary_tables[$parent->path])) {
+			return (string) $this->orm_primary_tables[$parent->path];
+		}
+		return null;
+	}
+
+	private function legacy_owner_column_name(string $parent_table_name, string $property_name): string
+	{
+		$parent = $parent_table_name;
+		if (substr($parent, 0, 1) === "$") {
+			$parent = substr($parent, 1);
+		}
+		return "$$" . $parent . "$" . $property_name;
+	}
+
+	private function legacy_collection_parent_ref_name(string $parent_table_name): string
+	{
+		return "$" . $parent_table_name;
+	}
+
+	private function legacy_child_table_name(string $parent_table_name, string $child_name): string
+	{
+		$parent = $parent_table_name;
+		if (substr($parent, 0, 1) === "$") {
+			$parent = substr($parent, 1);
+		}
+		return $parent . "_" . $child_name;
+	}
+
+	private function legacy_collection_child_table_name(string $parent_table_name, string $child_name): string
+	{
+		return $parent_table_name . "_" . $child_name;
+	}
+
+	private function reserve_redundant_root_helper_tables(string $root_table_name, \om3\base\orm\orm_node $node): void
+	{
+		if (
+			!$this->legacy_full_support ||
+			$node->name === null ||
+			$this->resolve_parent_primary_table_name($node) !== $root_table_name
+		) {
+			return;
+		}
+		for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+			$mat = $node->mat[$mat_index];
+			if (($mat->mode ?? "") !== "one_to_many") {
+				continue;
+			}
+			$table_name = $this->legacy_collection_child_table_name($root_table_name, $node->name);
+			$this->orm_suppressed_tables[$table_name] = $table_name;
+			return;
+		}
+	}
+
+	private function should_skip_suppressed_table(string $table_name): bool
+	{
+		return $this->legacy_full_support && isset($this->orm_suppressed_tables[$table_name]);
+	}
+
+	private function find_child_property_override(?\om3\base\schema\model_property $usage_property, string $property_name): ?\om3\base\schema\model_property
+	{
+		if ($usage_property === null) {
+			return null;
+		}
+		if (isset($usage_property->properties[$property_name])) {
+			return $usage_property->properties[$property_name];
+		}
+		return null;
+	}
+}

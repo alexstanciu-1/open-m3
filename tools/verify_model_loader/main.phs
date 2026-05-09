@@ -1,0 +1,72 @@
+<?php
+declare(strict_types=1);
+
+require_once "assembly_sample.hpp";
+require_once "orm_audit_sample.hpp";
+
+$dirs = [
+	"../../samples/h2b/model",
+	"../../samples/h2b/model/comm",
+	"../../samples/h2b/model/tfh",
+	"../../samples/h2b/model/util",
+	"../../samples/h2b/model/view",
+];
+
+$loaded /** int */ = 0;
+$failed /** int */ = 0;
+$scan_failed /** int */ = 0;
+$assembler = new \om3\base\assemble\model_assembler();
+$validator = new \om3\base\assemble\model_validator();
+$err /** error_t */;
+$first_failure /** string */ = "";
+
+foreach ($dirs as $dir) {
+	$entries /** vector<string> */ = [];
+	if (!take($entries, $err, fs_scan($dir))) {
+		echo "scan_failed:", $dir, "\n";
+		$scan_failed = $scan_failed + 1;
+		continue;
+	}
+
+	foreach ($entries as $entry) {
+		if (!str_ends_with($entry, ".json")) {
+			continue;
+		}
+
+		$path = $dir . "/" . $entry;
+		$model = \om3\base\load\json_loader::load_model($path);
+		if ($model === null) {
+			echo "load_failed:", $path, "\n";
+			$failed = $failed + 1;
+			if ($first_failure === "") {
+				$first_failure = $path;
+			}
+		} else {
+			$loaded = $loaded + 1;
+			$type_key = ($model->name !== null && $model->name !== "") ? $model->name : $path;
+			$assembler->register_raw_model($type_key, $model, $path);
+		}
+	}
+}
+
+echo "loaded=", $loaded, "\n";
+echo "failed=", $failed, "\n";
+echo "scan_failed=", $scan_failed, "\n";
+if ($first_failure !== "") {
+	echo "first_failure=", $first_failure, "\n";
+}
+
+$validator->validate_assembler($assembler);
+echo "validation_errors=", count($validator->errors), "\n";
+if (count($validator->errors) > 0) {
+	echo "first_validation_error=", $validator->errors[0], "\n";
+	echo "--validation-details--\n";
+	foreach ($validator->errors as $error) {
+		echo $error, "\n";
+	}
+}
+
+echo "--assembly-sample--\n";
+\om3\tools\verify_model_loader\assembly_sample::run();
+echo "--orm-structure-sample--\n";
+\om3\tools\verify_model_loader\orm_audit_sample::run();

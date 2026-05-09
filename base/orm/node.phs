@@ -1,0 +1,17 @@
+<?php
+declare(strict_types=1);
+
+require_once "node_base.hpp";
+require_once "mat.hpp";
+require_once "materialization_probe.hpp";
+
+namespace om3\base\orm;
+
+/** @lib-export */
+class orm_node extends orm_node_base
+{
+	public ?string $branch_kind = null;
+	public $mat /** vector<orm_mat> */ = [];
+	public $mat_by_type /** hash<int> */ = [];
+	public ?orm_materialization_probe $materialization = null;
+}

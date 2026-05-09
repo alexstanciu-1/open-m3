@@ -1,0 +1,12 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\base\orm;
+
+/** @lib-export */
+class orm_error
+{
+	public ?string $code = null;
+	public ?string $path = null;
+	public ?string $message = null;
+}

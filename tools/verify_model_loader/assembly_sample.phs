@@ -1,0 +1,140 @@
+<?php
+declare(strict_types=1);
+
+namespace om3\tools\verify_model_loader;
+
+class assembly_sample
+{
+	public static function run(): void
+	{
+		$demo_assembler = new \om3\base\assemble\model_assembler();
+		$base_dir = "../../samples/assembly_demo";
+
+		$demo_assembler->load_model_file("Address", $base_dir . "/Address.json");
+		$demo_assembler->load_model_file("Company", $base_dir . "/Company.json");
+		$demo_assembler->load_model_file("App", $base_dir . "/App.json");
+
+		$address_model = $demo_assembler->find_raw_model("Address");
+		$company_model = $demo_assembler->find_raw_model("Company");
+		$app_model = $demo_assembler->find_raw_model("App");
+		if ($address_model !== null) {
+			$address_storage = \om3\base\load\json_loader::load_storage($base_dir . "/Address.storage.json");
+			if ($address_storage !== null) {
+				\om3\base\load\json_loader::attach_storage($address_model, $address_storage);
+			}
+		}
+		if ($company_model !== null) {
+			$company_storage = \om3\base\load\json_loader::load_storage($base_dir . "/Company.storage.json");
+			if ($company_storage !== null) {
+				\om3\base\load\json_loader::attach_storage($company_model, $company_storage);
+			}
+		}
+		if ($app_model !== null) {
+			$app_storage = \om3\base\load\json_loader::load_storage($base_dir . "/App.storage.json");
+			if ($app_storage !== null) {
+				\om3\base\load\json_loader::attach_storage($app_model, $app_storage);
+			}
+		}
+
+		$company = $demo_assembler->find_raw_model("Company");
+		$app = $demo_assembler->find_raw_model("App");
+		if ($company === null || $app === null) {
+			echo "assembly_failed\n";
+			echo "missing_demo_models\n";
+			return;
+		}
+
+		$company_address = $company->properties["Address"];
+		$effective_company_address = $demo_assembler->refine_sub_path("Company.Address", "Address", $company_address);
+
+		$customers = $app->properties["Customers"];
+		$customers_address = $customers->properties["Address"];
+		$effective_customers_address = $demo_assembler->refine_sub_path("App.Customers.Address", "Address", $customers_address);
+
+		if ($effective_company_address === null || $effective_customers_address === null) {
+			echo "assembly_failed\n";
+			foreach ($demo_assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		echo "Company.Address=";
+		$first = true;
+		foreach ($effective_company_address->properties as $property_name => $property) {
+			if (!$first) {
+				echo ",";
+			}
+			echo $property_name;
+			$first = false;
+		}
+		echo "\n";
+
+		echo "App.Customers.Address=";
+		$first = true;
+		foreach ($effective_customers_address->properties as $property_name => $property) {
+			if (!$first) {
+				echo ",";
+			}
+			echo $property_name;
+			$first = false;
+		}
+		echo "\n";
+
+		echo "errors=", count($demo_assembler->errors), "\n";
+		echo "--db-structure-sample--\n";
+
+		$db_builder = new \om3\base\db\structure_builder();
+		$demo_db = $db_builder->build_from_root($demo_assembler, "App", "App");
+		if ($demo_db === null) {
+			echo "db_build_failed\n";
+			foreach ($db_builder->errors as $error) {
+				echo $error, "\n";
+			}
+		} else {
+			\om3\base\db\structure_builder::print_database($demo_db);
+			echo "db_errors=", count($db_builder->errors), "\n";
+			foreach ($db_builder->errors as $error) {
+				echo $error, "\n";
+			}
+		}
+
+		echo "--traverse-root--\n";
+
+		$h2b_assembler = new \om3\base\assemble\model_assembler();
+		$dirs = [
+			"../../samples/h2b/model",
+			"../../samples/h2b/model/comm",
+			"../../samples/h2b/model/tfh",
+			"../../samples/h2b/model/util",
+			"../../samples/h2b/model/view",
+		];
+		$err /** error_t */;
+
+		foreach ($dirs as $dir) {
+			$entries /** vector<string> */ = [];
+			if (!take($entries, $err, fs_scan($dir))) {
+				echo "traverse_scan_failed:", $dir, "\n";
+				continue;
+			}
+
+			foreach ($entries as $entry) {
+				if (!str_ends_with($entry, ".json")) {
+					continue;
+				}
+
+				$path = $dir . "/" . $entry;
+				$model = \om3\base\load\json_loader::load_model($path);
+				if ($model === null) {
+					echo "traverse_load_failed:", $path, "\n";
+					continue;
+				}
+
+				$type_key = ($model->name !== null && $model->name !== "") ? $model->name : $path;
+				$h2b_assembler->register_raw_model($type_key, $model, $path);
+			}
+		}
+
+		$h2b_assembler->traverse_root_echo("app", "app");
+	}
+}

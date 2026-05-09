@@ -1,0 +1,16 @@
+<?php
+declare(strict_types=1);
+
+require_once "node_base.hpp";
+require_once "node.hpp";
+require_once "error.hpp";
+
+namespace om3\base\orm;
+
+/** @lib-export */
+class orm_root extends orm_node_base
+{
+	public $nodes /** vector<orm_node> */ = [];
+	public $errors /** vector<orm_error> */ = [];
+	public int $max_depth = 16;
+}
