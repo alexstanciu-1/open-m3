@@ -1,1 +1,0 @@
-{"name":"Comm/Offer_Discount_mods_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Offer":{"name":"Offer","type.name":"Comm/Offer"},"Discount_Type":{"name":"Discount_Type","type.name":"string"},"Percent":{"name":"Percent","type.name":"float"},"Fixed":{"name":"Fixed","type.name":"float"}},"extends":"QModel"}

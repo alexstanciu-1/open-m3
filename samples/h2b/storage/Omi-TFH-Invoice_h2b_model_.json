@@ -1,1 +1,0 @@
-{"table":"Invoices","properties":{"Invoiced_To":{"sql_type":"enum('channel','property_owner')"},"Notes":{"sql_type":"TEXT"},"Status":{"sql_type":"enum('issued','generated','partially_collected','collected','canceled','outdated')"}}}

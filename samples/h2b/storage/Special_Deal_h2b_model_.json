@@ -1,1 +1,0 @@
-{"table":"Special_Deals","properties":{"Type":{"name":"Type","sql_type":"enum('special_offer','early_booking','last_minute')"},"TFH_Rate_Plans":{"name":"TFH_Rate_Plans","relation.type":"oneToMany","relation.target_column":true}}}

@@ -1,1 +1,0 @@
-{"table":"Payment_Policy_Items","properties":{"Date_Type":{"name":"Date_Type","sql_type":"enum('days_before','before_date','reservation_date')"},"Fee_Type":{"name":"Fee_Type","sql_type":"enum('percent','value','first_night','remaining','first_x_nights')"}}}

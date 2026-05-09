@@ -1,1 +1,0 @@
-{"table":"Room_Occupants","properties":{"Gender":{"name":"Gender","sql_type":"enum('Male','Female')"},"Type":{"name":"Type","sql_type":"enum('infant','toddler','child','adolescent','adult')"}}}

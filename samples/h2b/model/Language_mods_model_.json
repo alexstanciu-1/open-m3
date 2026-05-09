@@ -1,1 +1,0 @@
-{"name":"Language_mods_model_","extends":"QModel","properties":{"Code":{"name":"Code","type.name":"string","required":true},"Name":{"name":"Name","type.name":"string","required":true},"Id":{"name":"Id","type.name":"integer"},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}}}

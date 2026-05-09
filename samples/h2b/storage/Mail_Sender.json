@@ -1,1 +1,0 @@
-{"table":"Mails_Senders","properties":{"Email_Header_Text":{"name":"Email_Header_Text","sql_type":"TEXT"},"Email_Footer_Text":{"name":"Email_Footer_Text","sql_type":"TEXT"},"Encryption":{"name":"Encryption","sql_type":"enum('tls','ssl')"}}}

@@ -1,1 +1,0 @@
-{"table":"Bank_Accounts","properties":{"Currency":{"name":"Currency","sql_type":"enum('RON','EUR','USD')"}}}

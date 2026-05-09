@@ -1,1 +1,0 @@
-{"name":"TFH/Property_Facil_Business_Facilities_h2b_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Meeting_Banquet_Facilities":{"name":"Meeting_Banquet_Facilities","type.name":"boolean"},"Business_Centre":{"name":"Business_Centre","type.name":"boolean"}},"extends":"QModel"}

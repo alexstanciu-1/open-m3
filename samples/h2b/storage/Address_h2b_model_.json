@@ -1,1 +1,0 @@
-{"table":"Addresses","properties":{"Properties":{"name":"Properties","relation.type":"oneToMany","relation.target_column":"Address"}}}

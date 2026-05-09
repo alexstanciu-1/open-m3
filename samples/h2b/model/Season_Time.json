@@ -1,1 +1,0 @@
-{"name":"Season_Time","properties":{"Id":{"name":"Id","type.name":"int"},"From":{"name":"From","type.name":"date"},"To":{"name":"To","type.name":"date"}}}

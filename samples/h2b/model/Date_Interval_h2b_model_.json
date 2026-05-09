@@ -1,1 +1,0 @@
-{"name":"Date_Interval_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"End_Date":{"name":"End_Date","type.name":"date","type.list":true},"Start_Date":{"name":"Start_Date","type.name":"date","type.list":true}}}

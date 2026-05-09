@@ -1,1 +1,0 @@
-{"table":"DRR_Logs","properties":{"Queries_Executed":{"sql_type":"MEDIUMTEXT"},"Restrictions":{"sql_type":"VARCHAR(2048)"}}}

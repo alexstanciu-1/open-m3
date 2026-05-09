@@ -1,1 +1,0 @@
-{"name":"Util/Email","extends":"Util/Email_omi_util_","properties":{"imapConnection":{"name":"imapConnection","type.name":"mixed"},"Id":{"name":"Id","type.name":"integer"}}}

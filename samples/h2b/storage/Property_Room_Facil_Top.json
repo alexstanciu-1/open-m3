@@ -1,1 +1,0 @@
-{"table":"Property_Room_Facil_Top","properties":{"Air_Conditioning":{"name":"Air_Conditioning","sql_type":"enum('no','free','paid')"},"WiFi":{"name":"WiFi","sql_type":"enum('no','free','paid')"}}}

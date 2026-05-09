@@ -1,1 +1,0 @@
-{"name":"Comm/Price_Profile","properties":{"Items":{"name":"Items","type.name":"Comm/Price_Profile_Item","type.list":true},"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Currency":{"name":"Currency","type.name":"string"},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}}}

@@ -1,1 +1,0 @@
-{"name":"Invoice_Payment_Type","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Default":{"name":"Default","type.name":"boolean"},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}}}

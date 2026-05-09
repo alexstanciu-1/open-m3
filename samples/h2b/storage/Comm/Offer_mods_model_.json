@@ -1,1 +1,0 @@
-{"table":"Offers","properties":{"Type":{"name":"Type","sql_type":"enum('service','product','other')"},"Discounts":{"name":"Discounts","relation.type":"oneToMany","relation.target_column":"Offer"},"Price_Profile_Items":{"name":"Price_Profile_Items","relation.type":"oneToMany","relation.target_column":"Offer"}}}

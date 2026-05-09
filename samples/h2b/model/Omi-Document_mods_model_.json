@@ -1,1 +1,0 @@
-{"name":"Document_mods_model_","properties":{"Id":{"name":"Id","type.name":"string"},"File":{"name":"File","type.name":"file"},"IP":{"name":"IP","type.name":"string"},"User":{"name":"User","type.name":"User"},"Date":{"name":"Date","type.name":"datetime"}},"extends":"QModel"}

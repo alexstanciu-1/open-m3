@@ -1,1 +1,0 @@
-{"name":"LoginLog_mods_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"User":{"name":"User","type.name":"User"},"UserData":{"name":"UserData","type.name":"string"},"SessionId":{"name":"SessionId","type.name":"string"},"Date":{"name":"Date","type.name":"datetime"},"Ip":{"name":"Ip","type.name":"string"}}}

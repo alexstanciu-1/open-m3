@@ -1,1 +1,0 @@
-{"table":"Property_Facil_Reception_Services","properties":{"Luggage_Storage":{"name":"Luggage_Storage","sql_type":"enum('no','free','paid')"},"Safety_Deposit_Box":{"name":"Safety_Deposit_Box","sql_type":"enum('no','free','paid')"}}}

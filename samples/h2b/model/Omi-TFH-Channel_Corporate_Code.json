@@ -1,1 +1,0 @@
-{"name":"TFH/Channel_Corporate_Code","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Codes":{"name":"Codes","type.name":"string"},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}},"extends":"TFH/Channel_Corporate_Code_h2b_model_"}

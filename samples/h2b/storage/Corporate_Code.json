@@ -1,1 +1,0 @@
-{"table":"Corporate_Codes","properties":{"Name":{"name":"Name","sql_type":"VARCHAR(255)"},"Codes":{"name":"Codes","sql_type":"VARCHAR(2048)"},"Access_To_All":{"name":"Access_To_All","default":"'0'","nullable":false}}}

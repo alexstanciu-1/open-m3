@@ -1,1 +1,0 @@
-{"table":"Age_Intervals","properties":{"Codes":{"name":"Codes","sql_type":"VARCHAR(2048)"},"Access_To_All":{"name":"Access_To_All","default":"'0'","nullable":false}}}

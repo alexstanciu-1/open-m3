@@ -1,1 +1,0 @@
-{"name":"TFH/List_Offers_h2b_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Search":{"name":"Search","type.name":"TFH/Search_Offers"},"Limit_Offset":{"name":"Limit_Offset","type.name":"int"},"Limit_Count":{"name":"Limit_Count","type.name":"int"}},"extends":"QModel"}

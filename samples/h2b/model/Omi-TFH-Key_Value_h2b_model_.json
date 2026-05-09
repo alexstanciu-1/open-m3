@@ -1,1 +1,0 @@
-{"name":"TFH/Key_Value_h2b_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Key":{"name":"Key","type.name":"string"},"Value":{"name":"Value","type.name":"string"},"Value_Text":{"name":"Value_Text","type.name":"string"},"Rate_Set_Request":{"name":"Rate_Set_Request","type.name":"TFH/Rate_Set_Request"}},"extends":"QModel"}

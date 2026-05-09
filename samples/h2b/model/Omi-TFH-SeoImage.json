@@ -1,1 +1,0 @@
-{"name":"TFH/SeoImage","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Path":{"name":"Path","type.name":"file"},"Alt":{"name":"Alt","type.name":"string"},"Order":{"name":"Order","type.name":"int"}},"extends":"TFH/SeoImage_h2b_model_"}

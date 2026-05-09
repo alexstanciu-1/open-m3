@@ -1,1 +1,0 @@
-{"name":"Season_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Season_Time":{"name":"Season_Time","type.name":"TFH/Season_Time","type.list":true},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}}}

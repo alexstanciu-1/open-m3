@@ -1,1 +1,0 @@
-{"table":"Search_Offers","properties":{"City":{"name":"City","kind":"none"},"Price_Mode":{"name":"Price_Mode","sql_type":"enum('Per Night', 'Per Stay')"}}}

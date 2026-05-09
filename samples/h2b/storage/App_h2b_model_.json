@@ -1,1 +1,0 @@
-{"table":"$App","properties":{"Properties_Rooms":{"name":"Properties_Rooms","relation.type":"oneToMany","relation.target_column":"App_Properties_Rooms"},"Store_Locations":{"name":"Store_Locations","relation.type":"oneToMany","relation.target_column":"App_Store_Locations"},"App":{"name":"App","kind":"none"}}}

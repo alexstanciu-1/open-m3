@@ -1,1 +1,0 @@
-{"name":"Cache_View_h2b_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"}}}

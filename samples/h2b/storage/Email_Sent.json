@@ -1,1 +1,0 @@
-{"table":"Emails_Sent","properties":{"Body":{"name":"Body","sql_type":"TEXT"},"Date":{"name":"Date","index":true}}}

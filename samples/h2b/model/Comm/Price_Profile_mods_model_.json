@@ -1,1 +1,0 @@
-{"name":"Comm/Price_Profile_mods_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Items":{"name":"Items","type.name":"Comm/Price_Profile_Item","type.list":true},"Currency":{"name":"Currency","type.name":"string"}}}

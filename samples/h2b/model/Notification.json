@@ -1,1 +1,0 @@
-{"name":"Notification","properties":{"Id":{"name":"Id","type.name":"int"},"Title":{"name":"Title","type.name":"string"},"Details":{"name":"Details","type.name":"string"},"Date":{"name":"Date","type.name":"date"},"Level":{"name":"Level","type.name":"string"},"Dismiss":{"name":"Dismiss","type.name":"boolean"}}}

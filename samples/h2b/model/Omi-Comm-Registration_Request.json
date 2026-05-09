@@ -1,1 +1,0 @@
-{"name":"Comm/Registration_Request","properties":{"Id":{"name":"Id","type.name":"int"},"Company":{"name":"Company","type.name":"Comm/Company"},"User":{"name":"User","type.name":"User"},"IP":{"name":"IP","type.name":"string"},"Date":{"name":"Date","type.name":"datetime"}},"extends":"Comm/Registration_Request_h2b_model_"}

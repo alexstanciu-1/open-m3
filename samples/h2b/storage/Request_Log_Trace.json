@@ -1,1 +1,0 @@
-{"table":"Request_Logs_Traces","properties":{"Timestamp_ms":{"name":"Timestamp_ms","sql_type":"DECIMAL(20,4)"},"Timestamp_ms_end":{"name":"Timestamp_ms_end","sql_type":"DECIMAL(20,4)"},"Tags":{"name":"Tags","sql_type":"VARCHAR(4096)","index":true},"Traces":{"name":"Traces","sql_type":"MEDIUMTEXT"},"Data":{"name":"Data","sql_type":"LONGTEXT"}}}

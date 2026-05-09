@@ -1,1 +1,0 @@
-{"table":"Texts","properties":{"Key":{"sql_type":"VARCHAR(512)"},"Value":{"sql_type":"VARCHAR(8192)"},"Text":{"sql_type":"LONGTEXT"}}}

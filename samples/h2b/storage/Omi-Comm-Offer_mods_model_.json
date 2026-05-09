@@ -1,1 +1,0 @@
-{"table":"Offers","properties":{"Type":{"sql_type":"enum('service','product','other')"}}}

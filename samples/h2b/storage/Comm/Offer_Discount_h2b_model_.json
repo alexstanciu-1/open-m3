@@ -1,1 +1,0 @@
-{"table":"Offer_Discount","properties":{"TFH_Age_Interval":{"name":"TFH_Age_Interval","sql_type":"enum('infant','toddler','child','adolescent','adult')"},"Discount_Type":{"name":"Discount_Type","sql_type":"enum('percent','fixed')"}}}

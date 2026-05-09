@@ -1,1 +1,0 @@
-{"name":"Search_Location","properties":{"Id":{"name":"Id","type.name":"int"},"Caption":{"name":"Caption","type.name":"string"},"Addresses":{"name":"Addresses","type.name":"Address","type.list":true}}}

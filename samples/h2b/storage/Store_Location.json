@@ -1,1 +1,0 @@
-{"table":"Store_Locations","properties":{"Properties":{"name":"Properties","relation.type":"manyToMany","relation.table":"Properties_Store_Locations","relation.this_column":"Store_Location","relation.target_column":"Property"},"Properties_Indexes":{"name":"Properties_Indexes","relation.type":"oneToMany","relation.target_column":"Store_Location"}}}

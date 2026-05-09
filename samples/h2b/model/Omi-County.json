@@ -1,1 +1,0 @@
-{"name":"County","properties":{"Id":{"name":"Id","type.name":"string"},"Code":{"name":"Code","type.name":"string"},"Name":{"name":"Name","type.name":"string"},"Country":{"name":"Country","type.name":"Country","struct.ref":"Countries"},"Place_Id":{"name":"Place_Id","type.name":"string"},"Place_Mtime":{"name":"Place_Mtime","type.name":"datetime"}},"extends":"County_mods_model_"}

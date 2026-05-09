@@ -1,1 +1,0 @@
-{"name":"Contact_Information","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Department":{"name":"Department","type.name":"string"},"IsDefault":{"name":"IsDefault","type.name":"boolean"}}}

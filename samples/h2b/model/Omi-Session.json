@@ -1,1 +1,0 @@
-{"name":"Session","properties":{"SessionId":{"name":"SessionId","type.name":"string"},"IP":{"name":"IP","type.name":"string"},"Id":{"name":"Id","type.name":"integer"}},"extends":"Session_mods_model_"}

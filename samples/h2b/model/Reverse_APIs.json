@@ -1,1 +1,0 @@
-{"name":"Reverse_APIs","properties":{"Id":{"name":"Id","type.name":"int"},"Items":{"name":"Items","type.name":"Reverse_APIs_Item","type.list":true}}}

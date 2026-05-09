@@ -1,1 +1,0 @@
-{"table":"Services_Calendar","properties":{"Services":{"name":"Services","relation.type":"oneToMany","relation.target_column":"TFH_Service_Calendar"},"Dates":{"name":"Dates","relation.type":"oneToMany","relation.target_column":"Calendar"}}}

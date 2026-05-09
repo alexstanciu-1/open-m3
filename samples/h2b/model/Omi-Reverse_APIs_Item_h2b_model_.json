@@ -1,1 +1,0 @@
-{"name":"Reverse_APIs_Item_h2b_model_","properties":{"Id":{"name":"Id","type.name":"int"},"On_Action":{"name":"On_Action","type.name":"string"},"URL":{"name":"URL","type.name":"string"},"Arguments_Selector":{"name":"Arguments_Selector","type.name":"string"}},"extends":"QModel"}

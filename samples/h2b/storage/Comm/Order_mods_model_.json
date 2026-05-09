@@ -1,1 +1,0 @@
-{"table":"Orders","properties":{"Date":{"name":"Date","index":true},"Last_Modified_Date":{"name":"Last_Modified_Date","index":true},"Items":{"name":"Items","relation.type":"oneToMany","relation.target_column":"Order"},"Status":{"name":"Status","sql_type":"enum('Proposal','Submitted','Confirmed','Cancelled','Error')"},"Notes":{"name":"Notes","sql_type":"TEXT"}}}

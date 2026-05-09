@@ -1,1 +1,0 @@
-{"name":"Room_Occupancy_Limit","properties":{"Id":{"name":"Id","type.name":"int"},"Default_From":{"name":"Default_From","type.name":"int"},"Default_To":{"name":"Default_To","type.name":"int"},"Min":{"name":"Min","type.name":"int"},"Max":{"name":"Max","type.name":"int"}}}

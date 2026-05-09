@@ -1,1 +1,0 @@
-{"name":"QStorageTableColumn_frame_","properties":{"name":{"name":"name","type.name":"string"},"table":{"name":"table","type.name":"QStorageTable"},"Id":{"name":"Id","type.name":"integer"}},"extends":"QModel"}

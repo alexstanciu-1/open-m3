@@ -1,1 +1,0 @@
-{"table":"Cities","properties":{"Addresses":{"name":"Addresses","relation.type":"oneToMany","relation.target_column":"City"}}}

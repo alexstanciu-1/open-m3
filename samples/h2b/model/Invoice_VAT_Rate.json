@@ -1,1 +1,0 @@
-{"name":"Invoice_VAT_Rate","properties":{"Id":{"name":"Id","type.name":"int"},"Name":{"name":"Name","type.name":"string"},"Percent":{"name":"Percent","type.name":"int"},"Default":{"name":"Default","type.name":"boolean"},"Owner":{"name":"Owner","type.name":"Comm/Company","required":true,"struct.ref":"Companies"}}}

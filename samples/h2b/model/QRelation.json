@@ -1,1 +1,0 @@
-{"name":"QRelation","properties":{"Name":{"name":"Name","type.name":"string"},"Subject":{"name":"Subject","type.name":"QUserGroup"},"Groups":{"name":"Groups","type.name":"QUserGroup","type.list":true},"Id":{"name":"Id","type.name":"integer"}},"extends":"QRelation_frame_"}

@@ -1,1 +1,0 @@
-{"name":"Comm/Bank_Account_mods_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Bank_Name":{"name":"Bank_Name","type.name":"string"},"IBAN":{"name":"IBAN","type.name":"string"},"Currency":{"name":"Currency","type.name":"string"}},"extends":"QModel"}

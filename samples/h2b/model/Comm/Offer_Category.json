@@ -1,1 +1,0 @@
-{"name":"Comm/Offer_Category","extends":"Comm/Offer_Category_mods_model_","properties":{"Id":{"name":"Id","type.name":"int"},"Code":{"name":"Code","type.name":"string"},"Name":{"name":"Name","type.name":"string"}}}

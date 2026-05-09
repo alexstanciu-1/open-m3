@@ -1,1 +1,0 @@
-{"name":"FailedLogin_mods_model_","extends":"QModel","properties":{"Id":{"name":"Id","type.name":"int"},"LastTry":{"name":"LastTry","type.name":"datetime"},"Ip":{"name":"Ip","type.name":"string"},"Username":{"name":"Username","type.name":"string"},"Ban":{"name":"Ban","type.name":"datetime"},"Count":{"name":"Count","type.name":"int"}}}

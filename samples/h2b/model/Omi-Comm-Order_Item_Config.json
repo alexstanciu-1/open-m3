@@ -1,1 +1,0 @@
-{"name":"Comm/Order_Item_Config","properties":{"Id":{"name":"Id","type.name":"int"},"Index":{"name":"Index","type.name":"int"}},"extends":"QModel"}

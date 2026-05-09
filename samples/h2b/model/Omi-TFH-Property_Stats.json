@@ -1,1 +1,0 @@
-{"name":"TFH/Property_Stats","properties":{"Id":{"name":"Id","type.name":"int"},"Count_Live_Rates":{"name":"Count_Live_Rates","type.name":"int"},"Has_Age_Intervals":{"name":"Has_Age_Intervals","type.name":"boolean"}},"extends":"TFH/Property_Stats_h2b_model_"}

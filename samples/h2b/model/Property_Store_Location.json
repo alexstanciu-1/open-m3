@@ -1,1 +1,0 @@
-{"name":"Property_Store_Location","properties":{"Id":{"name":"Id","type.name":"int"},"Store_Location":{"name":"Store_Location","type.name":"TFH/Store_Location"},"Property":{"name":"Property","type.name":"TFH/Property"},"Index":{"name":"Index","type.name":"int"}}}

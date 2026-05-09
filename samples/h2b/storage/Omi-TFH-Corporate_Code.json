@@ -1,1 +1,0 @@
-{"table":"Corporate_Codes","properties":{"Name":{"sql_type":"VARCHAR(255)"},"Codes":{"sql_type":"VARCHAR(2048)"}}}

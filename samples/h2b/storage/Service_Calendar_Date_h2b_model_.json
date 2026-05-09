@@ -1,1 +1,0 @@
-{"table":"Services_Calendar_Dates","properties":{"Date":{"name":"Date","sql_type":"DATE"},"Status":{"name":"Status","sql_type":"enum('open','closed')"}}}

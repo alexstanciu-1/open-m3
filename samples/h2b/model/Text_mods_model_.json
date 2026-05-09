@@ -1,1 +1,0 @@
-{"name":"Text_mods_model_","extends":"QModel","properties":{"Key":{"name":"Key","type.name":"string"},"Value":{"name":"Value","type.name":"string"},"Text":{"name":"Text","type.name":"string"},"Id":{"name":"Id","type.name":"integer"}}}

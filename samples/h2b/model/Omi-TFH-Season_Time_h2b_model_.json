@@ -1,1 +1,0 @@
-{"name":"TFH/Season_Time_h2b_model_","properties":{"Id":{"name":"Id","type.name":"int"},"From":{"name":"From","type.name":"date"},"To":{"name":"To","type.name":"date"}},"extends":"QModel"}

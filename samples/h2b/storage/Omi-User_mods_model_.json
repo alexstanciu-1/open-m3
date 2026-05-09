@@ -1,1 +1,0 @@
-{"table":"$Users","properties":{"Type":{"sql_type":"enum('User','Admin','Superadmin','Sales')"}}}
