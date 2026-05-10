@@ -1,0 +1,36 @@
+namespace om3\tools\inherited_nullable_vector_repro;
+
+abstract class base_node
+{
+	public ?string $path = null;
+}
+
+class child_node extends base_node
+{
+	public ?string $name = null;
+}
+
+class root_node extends base_node
+{
+	public $nodes /** vector<child_node> */ = [];
+}
+
+$root = new root_node();
+$root->path = "root";
+
+$child = new child_node();
+$child->path = "root.child";
+$child->name = "child";
+$root->nodes[] = $child;
+
+echo "count=", count($root->nodes), "\n";
+echo "root_path=", ($root->path ?? ""), "\n";
+
+$first = $root->nodes[0];
+echo "first_name=", ($first->name ?? ""), "\n";
+echo "first_path=", ($first->path ?? ""), "\n";
+
+for ($i = 0; $i < count($root->nodes); $i++) {
+	$node = $root->nodes[$i];
+	echo "loop_path=", ($node->path ?? ""), "\n";
+}

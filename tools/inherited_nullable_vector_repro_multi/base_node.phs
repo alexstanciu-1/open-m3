@@ -1,0 +1,9 @@
+namespace om3\tools\inherited_nullable_vector_repro_multi;
+
+abstract class base_node
+{
+	public ?string $path = null;
+	public ?base_node $parent = null;
+	public ?string $name = null;
+	public bool $is_root = false;
+}

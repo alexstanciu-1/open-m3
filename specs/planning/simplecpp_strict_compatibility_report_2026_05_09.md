@@ -64,7 +64,13 @@ Reason:
   - `Undefined property: ... ConstantDecl::$line`
   - `Generator::appendHeaderLine(): Argument #3 ($originLine) must be of type int, null given`
 
-This is a workaround, not a preferred final source style decision.
+This was a workaround, not a preferred final source style decision.
+
+Update:
+
+- retested on `scpp 0.1.23`
+- the original top-level `const` form now builds cleanly again
+- the repo has been switched back to the normal `const` form
 
 ### 4. Removed namespace from the `base` entrypoint
 
@@ -217,9 +223,144 @@ This path resolves incorrectly from the actual build location in the Open M3 rep
 
 Once SimpleC++ is fixed, these repo-side workarounds should be revisited:
 
-1. `type_blacklist()` / `*_dir()` accessor-function workaround in `step_02_json_literal.phs`
-2. restored local `simple_cpp` symlink
-3. any manual reliance on `.prism/build` direct execution for diagnosis
+1. restored local `simple_cpp` symlink
+2. any manual reliance on `.prism/build` direct execution for diagnosis
+
+## Code-Focused Addendum
+
+This section tracks remaining source patterns that still look like toolchain-driven workarounds or compatibility stabilizers, even when they are currently acceptable and build correctly.
+
+The purpose is not to remove them blindly now.
+
+The purpose is to:
+
+- keep a review list
+- map code patterns back to upstream SimpleC++ issues
+- make later cleanup easier once fixes land
+
+### A. Foreach Key Stabilization
+
+Current repro locations:
+
+- [tools/hash_probe/main.phs](/home/alexv/__AI/open_m3/open_m3_01/tools/hash_probe/main.phs:28)
+- [tools/hash_probe/main.phs](/home/alexv/__AI/open_m3/open_m3_01/tools/hash_probe/main.phs:40)
+
+Pattern:
+
+```php
+$key_s /** string */ = (string) $key;
+```
+
+Reason:
+
+- typed `hash<T>` foreach keys still do not feel fully surfaced as naturally typed string keys at common typed boundaries
+
+Related upstream issue:
+
+- [simplecpp#54](https://github.com/alexstanciu-1/simplecpp/issues/54)
+
+### B. Top-Level `const` Replacement With Accessor Functions
+
+Historical location:
+
+- [tools/h2b_types_to_om3/step_02_json_literal.phs](/home/alexv/__AI/open_m3/open_m3_01/tools/h2b_types_to_om3/step_02_json_literal.phs:1)
+
+Reason:
+
+- top-level `const` declarations triggered a generator crash on `scpp 0.1.22`
+
+Related upstream issue:
+
+- [simplecpp#51](https://github.com/alexstanciu-1/simplecpp/issues/51)
+
+Current status:
+
+- resolved upstream
+- retested successfully on `scpp 0.1.23`
+- workaround removed from repo code
+
+### C. Explicit Typed Parameter Upgrade For Checker Compatibility
+
+Current location:
+
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:49)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:62)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:84)
+
+Pattern:
+
+```php
+$known_types hash<bool>
+```
+
+Reason:
+
+- `scpp 0.1.22` rejected the earlier annotation-only parameter form
+
+Assessment:
+
+- this is probably acceptable final strict code
+- but it is still recorded here because it was introduced specifically as part of the compatibility pass
+
+### D. Broad Manual `(string)` Stabilization At Mixed/Hash Boundaries
+
+These sites may be legitimate normalization points, but as a group they still deserve later review because they may partly reflect missing or awkward key/value typing behavior.
+
+Representative locations:
+
+- [base/json_loader.phs](/home/alexv/__AI/open_m3/open_m3_01/base/json_loader.phs:89)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:37)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:56)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:72)
+- [base/model_validator.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_validator.phs:80)
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:77)
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:188)
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:193)
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:206)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:176)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:285)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:489)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:603)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:1256)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:1679)
+
+Assessment:
+
+- not every `(string)` cast here is necessarily a bug or workaround
+- some are reasonable explicit normalization boundaries
+- but this cluster should be re-reviewed after the foreach/hash typing issues are improved upstream
+
+### E. Executable Entrypoint Namespace Constraint
+
+Current location:
+
+- [base/main.phs](/home/alexv/__AI/open_m3/open_m3_01/base/main.phs:1)
+
+Change made:
+
+- removed the namespace from the executable entrypoint
+
+Reason:
+
+- the namespaced entrypoint linked with `undefined symbol: main`
+
+Assessment:
+
+- this may simply be the required rule for executable entry files in strict projects
+- still tracked here because it changed during the compatibility pass and should be documented explicitly
+
+### F. Runtime Launch Workaround Attempts
+
+These are not committed code patterns, but they are still important workaround history:
+
+- temporarily restoring a local `simple_cpp` symlink
+- manually trying to execute binaries from `.prism/build`
+- using `scpp build` instead of `scpp run` as the reliable validation gate
+
+Related upstream issues:
+
+- [simplecpp#52](https://github.com/alexstanciu-1/simplecpp/issues/52)
+- [simplecpp#53](https://github.com/alexstanciu-1/simplecpp/issues/53)
 
 ## Recommended Next Step
 

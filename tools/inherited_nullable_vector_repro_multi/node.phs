@@ -1,0 +1,6 @@
+namespace om3\tools\inherited_nullable_vector_repro_multi;
+
+class sample_node extends base_node
+{
+	public ?string $branch_kind = null;
+}

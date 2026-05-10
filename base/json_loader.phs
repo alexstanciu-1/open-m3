@@ -1,8 +1,3 @@
-require_once "schema/model.hpp";
-require_once "schema/model_property.hpp";
-require_once "schema/storage.hpp";
-require_once "schema/storage_property.hpp";
-
 namespace om3\base\load;
 
 /** @lib-export */

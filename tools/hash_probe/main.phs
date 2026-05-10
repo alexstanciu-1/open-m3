@@ -25,11 +25,10 @@ echo "street_value=", $items["Street"]->value, "\n";
 echo "keys=";
 $first = true;
 foreach ($items as $key => $value) {
-	$key_s /** string */ = (string) $key;
 	if (!$first) {
 		echo ",";
 	}
-	echo $key_s;
+	echo $key;
 	$first = false;
 }
 echo "\n";
@@ -37,12 +36,11 @@ echo "\n";
 echo "pairs=";
 $first = true;
 foreach ($items as $key => $value) {
-	$key_s /** string */ = (string) $key;
 	$typed_value /** item */ = $value;
 	if (!$first) {
 		echo ",";
 	}
-	echo $key_s, ":", $typed_value->value;
+	echo $key, ":", $typed_value->value;
 	$first = false;
 }
 echo "\n";

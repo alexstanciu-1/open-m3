@@ -1,47 +1,21 @@
-function debug_enabled(): bool
-{
-	return false;
-}
+const DEBUG = false;
 
-function types_json_dir(): string
-{
-	return "../../../open_m3_primary/_legacy_code/h2b/code/temp/types_json";
-}
-
-function samples_root_dir(): string
-{
-	return "../../samples/h2b";
-}
-
-function model_out_dir(): string
-{
-	return samples_root_dir() . "/model";
-}
-
-function storage_out_dir(): string
-{
-	return samples_root_dir() . "/storage";
-}
-
-function report_out_dir(): string
-{
-	return samples_root_dir() . "/report";
-}
-
-function type_blacklist(): mixed
-{
-	return [
-		"qfolderstorage" => true,
-		"qmysqlstorage" => true,
-		"qsqldatabase" => true,
-		"qsqlstorage" => true,
-		"qsqltable" => true,
-		"qstorage" => true,
-		"qstorageentry" => true,
-		"qstoragefolder" => true,
-		"qstoragetable" => true,
-	];
-}
+const TYPES_JSON_DIR = "../../../open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+const SAMPLES_ROOT_DIR = "../../samples/h2b";
+const MODEL_OUT_DIR = SAMPLES_ROOT_DIR . "/model";
+const STORAGE_OUT_DIR = SAMPLES_ROOT_DIR . "/storage";
+const REPORT_OUT_DIR = SAMPLES_ROOT_DIR . "/report";
+const TYPE_BLACKLIST = [
+	"qfolderstorage" => true,
+	"qmysqlstorage" => true,
+	"qsqldatabase" => true,
+	"qsqlstorage" => true,
+	"qsqltable" => true,
+	"qstorage" => true,
+	"qstorageentry" => true,
+	"qstoragefolder" => true,
+	"qstoragetable" => true,
+];
 
 function normalize_type_path(mixed $legacy_type_name): string
 {
@@ -59,8 +33,7 @@ function has_value(mixed $value): bool
 
 function is_blacklisted_type(string $type_name): bool
 {
-	$blacklist = type_blacklist();
-	return isset($blacklist[$type_name]) && ($blacklist[$type_name] === true);
+	return TYPE_BLACKLIST[$type_name] === true;
 }
 
 function legacy_types_info(mixed $legacy_types): mixed
@@ -287,15 +260,15 @@ function collect_unmapped_type_metadata(mixed $legacy_type): mixed
 
 $scanned /** vector<string> */ = [];
 $scan_err /** error_t */;
-if (!take($scanned, $scan_err, fs_scan(types_json_dir()))) {
+if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
 	echo "failed to scan input directory\n";
 } else {
 	$dirs_ready =
 		ensure_dir("../../samples") &&
-		ensure_dir(samples_root_dir()) &&
-		ensure_dir(model_out_dir()) &&
-		ensure_dir(storage_out_dir()) &&
-		ensure_dir(report_out_dir());
+		ensure_dir(SAMPLES_ROOT_DIR) &&
+		ensure_dir(MODEL_OUT_DIR) &&
+		ensure_dir(STORAGE_OUT_DIR) &&
+		ensure_dir(REPORT_OUT_DIR);
 
 	$converted = [];
 	$failed = [];
@@ -312,13 +285,13 @@ if (!take($scanned, $scan_err, fs_scan(types_json_dir()))) {
 				continue;
 			}
 
-				if (debug_enabled()) {
+			if (DEBUG) {
 				echo "converting ";
 				echo $type_file;
 				echo "\n";
 			}
 
-				$json_path = types_json_dir() . "/" . $type_file;
+			$json_path = TYPES_JSON_DIR . "/" . $type_file;
 			$json /** string */ = "";
 			$read_err /** error_t */;
 			if (!take($json, $read_err, fs_get($json_path))) {
@@ -338,8 +311,8 @@ if (!take($scanned, $scan_err, fs_scan(types_json_dir()))) {
 			}
 			$storage_om3 = convert_storage_to_om3($data);
 			$output_name = type_path_to_output_name($model_om3["name"]);
-				$model_out_path = model_out_dir() . "/" . $output_name;
-				$storage_out_path = storage_out_dir() . "/" . $output_name;
+			$model_out_path = MODEL_OUT_DIR . "/" . $output_name;
+			$storage_out_path = STORAGE_OUT_DIR . "/" . $output_name;
 
 			$model_parent_ready = ensure_parent_dir($model_out_path);
 			$storage_parent_ready = ensure_parent_dir($storage_out_path);
@@ -354,7 +327,7 @@ if (!take($scanned, $scan_err, fs_scan(types_json_dir()))) {
 			}
 		}
 
-			write_json_file(report_out_dir() . "/unmapped.json", $unmapped_report);
+		write_json_file(REPORT_OUT_DIR . "/unmapped.json", $unmapped_report);
 
 		echo "converted ";
 		echo count($converted);

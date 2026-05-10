@@ -1,0 +1,26 @@
+namespace om3\tools\inherited_nullable_vector_repro_multi;
+
+$root = new sample_root();
+$root->path = "root";
+$root->name = "root";
+$root->is_root = true;
+
+$child = new sample_node();
+$child->path = "root.child";
+$child->name = "child";
+$child->parent = $root;
+$child->branch_kind = "collection_ref";
+
+$root->nodes[] = $child;
+
+echo "count=", count($root->nodes), "\n";
+echo "root_path=", ($root->path ?? ""), "\n";
+echo "child_path_direct=", ($root->nodes[0]->path ?? ""), "\n";
+
+for ($i = 0; $i < count($root->nodes); $i++) {
+	$node = $root->nodes[$i];
+	echo "loop_path=", ($node->path ?? ""), "\n";
+	echo "loop_name=", ($node->name ?? ""), "\n";
+	echo "loop_branch=", ($node->branch_kind ?? ""), "\n";
+	echo "loop_parent_path=", ($node->parent !== null) ? ($node->parent->path ?? "") : "", "\n";
+}

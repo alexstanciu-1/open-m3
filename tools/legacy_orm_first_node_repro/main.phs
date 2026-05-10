@@ -1,0 +1,25 @@
+namespace om3\tools\legacy_orm_first_node_repro;
+
+function tsv_field(string $value): string
+{
+	return str_replace(["\t", "\r", "\n"], [" ", " ", " "], $value);
+}
+
+$assembler = new \om3\base\assemble\model_assembler();
+$root = $assembler->build_legacy_orm_root(
+	"/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json",
+	"Omi\\App"
+);
+
+if ($root === null) {
+	echo "root_build_failed\n";
+	foreach ($assembler->errors as $error) {
+		echo $error, "\n";
+	}
+} else {
+	echo "nodes=", count($root->nodes), "\n";
+	echo "root_path=", ($root->path ?? ""), "\n";
+	echo "first_path=", ($root->nodes[0]->path ?? ""), "\n";
+	$first_path_text /** string */ = ($root->nodes[0]->path ?? "");
+	echo "first_path_tsv=", tsv_field($first_path_text), "\n";
+}

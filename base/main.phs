@@ -1,21 +1,3 @@
-require_once "json_loader.hpp";
-require_once "model_assembler.hpp";
-require_once "model_validator.hpp";
-require_once "orm/node_base.hpp";
-require_once "orm/root.hpp";
-require_once "orm/node.hpp";
-require_once "orm/mat.hpp";
-require_once "orm/materialization_probe.hpp";
-require_once "orm/error.hpp";
-require_once "orm/audit_entry.hpp";
-require_once "orm/audit_result.hpp";
-require_once "db/structure_builder.hpp";
-require_once "db/database.hpp";
-require_once "db/table.hpp";
-require_once "db/column.hpp";
-require_once "db/index.hpp";
-require_once "db/reference.hpp";
-
 $model_path = "../samples/h2b/model/tfh/property.json";
 $storage_path = "../samples/h2b/storage/tfh/property.json";
 

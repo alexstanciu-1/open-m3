@@ -1,0 +1,28 @@
+namespace om3\tools\orm_runtime_repro;
+
+$root = new \om3\base\orm\orm_root();
+$root->path = "Omi/App";
+$root->name = "App";
+$root->is_root = true;
+
+$child = new \om3\base\orm\orm_node();
+$child->path = "Omi/App.Users";
+$child->name = "Users";
+$child->parent = $root;
+$child->is_list = true;
+$child->branch_kind = "collection_ref";
+
+$root->nodes[] = $child;
+$root->children[] = $child;
+
+echo "count=", count($root->nodes), "\n";
+echo "root_path=", ($root->path ?? ""), "\n";
+echo "child_path_direct=", ($root->nodes[0]->path ?? ""), "\n";
+
+for ($i = 0; $i < count($root->nodes); $i++) {
+	$node = $root->nodes[$i];
+	echo "loop_path=", ($node->path ?? ""), "\n";
+	echo "loop_name=", ($node->name ?? ""), "\n";
+	echo "loop_branch=", ($node->branch_kind ?? ""), "\n";
+	echo "loop_parent_path=", ($node->parent !== null) ? ($node->parent->path ?? "") : "", "\n";
+}
