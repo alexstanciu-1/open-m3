@@ -6,16 +6,16 @@ $dirs = [
 	"../../samples/h2b/model/view",
 ];
 
-$loaded /** int */ = 0;
-$failed /** int */ = 0;
-$scan_failed /** int */ = 0;
+$loaded int = 0;
+$failed int = 0;
+$scan_failed int = 0;
 $assembler = new \om3\base\assemble\model_assembler();
 $validator = new \om3\base\assemble\model_validator();
-$err /** error_t */;
-$first_failure /** string */ = "";
+$err error_t;
+$first_failure string = "";
 
 foreach ($dirs as $dir) {
-	$entries /** vector<string> */ = [];
+	$entries vector<string> = [];
 	if (!take($entries, $err, fs_scan($dir))) {
 		echo "scan_failed:", $dir, "\n";
 		$scan_failed = $scan_failed + 1;

@@ -3,11 +3,11 @@ namespace om3\base\assemble;
 /** @lib-export */
 class model_validator
 {
-	public $errors /** vector<string> */ = [];
+	public $errors vector<string> = [];
 
 	public function validate_assembler(model_assembler $assembler): void
 	{
-		$known_types /** hash<bool> */ = [];
+		$known_types hash<bool> = [];
 		for ($index = 0; $index < count($assembler->raw_models); $index++) {
 			$entry = $assembler->raw_models[$index];
 			if ($entry->key === null || $entry->key === "") {
@@ -32,9 +32,9 @@ class model_validator
 				continue;
 			}
 
-			$model_name /** string */ = (string) $entry->key;
+			$model_name = $entry->key;
 			if ($entry->model->extends !== null && $entry->model->extends !== "") {
-				$extends_type /** string */ = (string) $entry->model->extends;
+				$extends_type = $entry->model->extends;
 				if (!$this->is_known_type($extends_type, $known_types)) {
 					$this->errors[] = "missing_extends_type:" . $model_name . ":" . $extends_type;
 				}
@@ -51,9 +51,7 @@ class model_validator
 	): void
 	{
 		foreach ($model->properties as $property_name => $property) {
-			$property_key /** string */ = (string) $property_name;
-			$property = $model->properties[$property_key];
-			$this->validate_property($owner_path, $property_key, $property, $known_types);
+			$this->validate_property($owner_path, $property_name, $property, $known_types);
 		}
 	}
 
@@ -67,7 +65,7 @@ class model_validator
 			$property_path = $owner_path . "." . $property_key;
 
 			if ($property->type_name !== null && $property->type_name !== "") {
-				$property_type /** string */ = (string) $property->type_name;
+				$property_type = $property->type_name;
 				if (!$this->is_known_type($property_type, $known_types)) {
 					$this->errors[] = "missing_property_type:" . $property_path . ":" . $property_type;
 				}
@@ -75,9 +73,7 @@ class model_validator
 
 			if ($property->property_count > 0) {
 				foreach ($property->properties as $child_name => $child_property) {
-					$child_key /** string */ = (string) $child_name;
-					$child_property = $property->properties[$child_key];
-					$this->validate_property($property_path, $child_key, $child_property, $known_types);
+					$this->validate_property($property_path, $child_name, $child_property, $known_types);
 				}
 			}
 	}

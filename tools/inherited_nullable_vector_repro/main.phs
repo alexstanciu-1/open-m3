@@ -12,7 +12,7 @@ class child_node extends base_node
 
 class root_node extends base_node
 {
-	public $nodes /** vector<child_node> */ = [];
+	public $nodes vector<child_node> = [];
 }
 
 $root = new root_node();

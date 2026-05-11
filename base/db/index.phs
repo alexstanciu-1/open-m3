@@ -6,5 +6,5 @@ class db_index
 	public ?db_table $parent_table = null;
 	public ?string $name = null;
 	public ?string $kind = null;
-	public $columns /** vector<string> */ = [];
+	public $columns vector<string> = [];
 }

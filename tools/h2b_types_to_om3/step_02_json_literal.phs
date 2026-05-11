@@ -201,8 +201,8 @@ function write_json_file(string $path, mixed $payload): bool
 		return false;
 	}
 
-	$written /** int */ = 0;
-	$err /** error_t */;
+	$written int = 0;
+	$err error_t;
 	return take($written, $err, fs_put($path, $json . "\n"));
 }
 
@@ -258,8 +258,8 @@ function collect_unmapped_type_metadata(mixed $legacy_type): mixed
 	return $report;
 }
 
-$scanned /** vector<string> */ = [];
-$scan_err /** error_t */;
+$scanned vector<string> = [];
+$scan_err error_t;
 if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
 	echo "failed to scan input directory\n";
 } else {
@@ -292,8 +292,8 @@ if (!take($scanned, $scan_err, fs_scan(TYPES_JSON_DIR))) {
 			}
 
 			$json_path = TYPES_JSON_DIR . "/" . $type_file;
-			$json /** string */ = "";
-			$read_err /** error_t */;
+			$json string = "";
+			$read_err error_t;
 			if (!take($json, $read_err, fs_get($json_path))) {
 				$failed[] = $type_file;
 				continue;

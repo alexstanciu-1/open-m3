@@ -13,6 +13,6 @@ class model_property
 	public bool $struct_weakref = false;
 	public bool $disabled = false;
 	public int $property_count = 0;
-	public $properties /** hash<model_property> */ = [];
+	public $properties hash<model_property> = [];
 	public ?storage_property $attached_storage = null;
 }

@@ -5,7 +5,7 @@ class json_loader
 {
 	public static function load_json_file(string $path): mixed
 	{
-		$json /** string */ = "";
+		$json string = "";
 		$err /** error_t */;
 		if (!take($json, $err, fs_get($path))) {
 			return null;
@@ -81,7 +81,7 @@ class json_loader
 		$storage_def->owner_model = $model_def;
 
 		foreach ($model_def->properties as $property_name => $model_property_def) {
-			$property_key /** string */ = (string) $property_name;
+			$property_key string = (string) $property_name;
 			$typed_model_property = $model_def->properties[$property_key];
 			$storage_property_def = self::find_storage_property($storage_def, $property_key);
 			if ($storage_property_def !== null) {

@@ -6,11 +6,11 @@ abstract class orm_node_base
 	public ?string $path = null;
 	public ?orm_node_base $parent = null;
 	public ?string $name = null;
-	public $children /** vector<orm_node> */ = [];
-	public $properties /** hash<om3\base\schema\model_property> */ = [];
+	public $children vector<orm_node> = [];
+	public $properties hash<om3\base\schema\model_property> = [];
 	public bool $is_root = false;
 	public bool $is_scalar = false;
 	public bool $is_list = false;
 	public ?string $type = null;
-	public $type_models /** vector<om3\base\schema\model> */ = [];
+	public $type_models vector<om3\base\schema\model> = [];
 }

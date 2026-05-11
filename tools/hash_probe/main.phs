@@ -6,7 +6,7 @@ class item
 	public int $value = 0;
 }
 
-$items /** hash<item> */ = [];
+$items hash<item> = [];
 
 $street = new item();
 $street->name = "Street";
@@ -36,7 +36,7 @@ echo "\n";
 echo "pairs=";
 $first = true;
 foreach ($items as $key => $value) {
-	$typed_value /** item */ = $value;
+	$typed_value item = $value;
 	if (!$first) {
 		echo ",";
 	}

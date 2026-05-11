@@ -9,7 +9,7 @@ class db_table
 	public ?string $charset = null;
 	public ?string $collation = null;
 	public ?string $comment = null;
-	public $columns /** hash<db_column> */ = [];
-	public $indexes /** hash<db_index> */ = [];
-	public $references /** hash<db_reference> */ = [];
+	public $columns hash<db_column> = [];
+	public $indexes hash<db_index> = [];
+	public $references hash<db_reference> = [];
 }

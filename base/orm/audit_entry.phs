@@ -6,5 +6,5 @@ class orm_audit_entry
 	public ?string $path = null;
 	public ?string $name = null;
 	public int $count = 0;
-	public $values /** vector<string> */ = [];
+	public $values vector<string> = [];
 }

@@ -1,0 +1,4 @@
+version: 1
+display_name: Simple C++ PHP Strict
+short_description: OM3 strict `.phs` authoring and validation guidance
+default_prompt: Review the local OM3 strict PHP++ guidance, apply the smallest correct strict-mode code changes, and validate the affected OM3 projects with the current build workflow.

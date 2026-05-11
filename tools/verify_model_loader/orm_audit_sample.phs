@@ -170,8 +170,7 @@ class orm_audit_sample
 	private static function print_generated_tables_tsv(\om3\base\db\db_database $db): void
 	{
 		foreach ($db->tables as $table_name => $_unused) {
-			$table_key = (string) $table_name;
-			$table = $db->tables[$table_key];
+			$table = $db->tables[$table_name];
 			echo self::tsv_field($table->name ?? ""), "\n";
 		}
 	}
@@ -179,11 +178,9 @@ class orm_audit_sample
 	private static function print_generated_columns_tsv(\om3\base\db\db_database $db): void
 	{
 		foreach ($db->tables as $table_name => $_unused_table) {
-			$table_key = (string) $table_name;
-			$table = $db->tables[$table_key];
+			$table = $db->tables[$table_name];
 			foreach ($table->columns as $column_name => $_unused_column) {
-				$column_key = (string) $column_name;
-				$column = $table->columns[$column_key];
+				$column = $table->columns[$column_name];
 				echo self::tsv_field($table->name ?? ""), "\t",
 					self::tsv_field($column->name ?? ""), "\t",
 					self::tsv_field($column->type ?? ""), "\t",
@@ -195,7 +192,9 @@ class orm_audit_sample
 
 	private static function tsv_field(string $value): string
 	{
-		return str_replace(["\t", "\r", "\n"], [" ", " ", " "], $value);
+		$value = str_replace("\t", " ", $value);
+		$value = str_replace("\r", " ", $value);
+		return str_replace("\n", " ", $value);
 	}
 
 	private static function print_mat_debug(\om3\base\orm\orm_root $root, array $paths): void

@@ -3,7 +3,7 @@ namespace om3\base\orm;
 /** @lib-export */
 class orm_root extends orm_node_base
 {
-	public $nodes /** vector<orm_node> */ = [];
-	public $errors /** vector<orm_error> */ = [];
+	public $nodes vector<orm_node> = [];
+	public $errors vector<orm_error> = [];
 	public int $max_depth = 16;
 }

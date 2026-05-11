@@ -2,7 +2,9 @@ namespace om3\tools\legacy_orm_first_node_repro;
 
 function tsv_field(string $value): string
 {
-	return str_replace(["\t", "\r", "\n"], [" ", " ", " "], $value);
+	$value = str_replace("\t", " ", $value);
+	$value = str_replace("\r", " ", $value);
+	return str_replace("\n", " ", $value);
 }
 
 $assembler = new \om3\base\assemble\model_assembler();
@@ -20,6 +22,6 @@ if ($root === null) {
 	echo "nodes=", count($root->nodes), "\n";
 	echo "root_path=", ($root->path ?? ""), "\n";
 	echo "first_path=", ($root->nodes[0]->path ?? ""), "\n";
-	$first_path_text /** string */ = ($root->nodes[0]->path ?? "");
+	$first_path_text = ($root->nodes[0]->path ?? "");
 	echo "first_path_tsv=", tsv_field($first_path_text), "\n";
 }

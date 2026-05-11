@@ -106,10 +106,10 @@ class assembly_sample
 			"../../samples/h2b/model/util",
 			"../../samples/h2b/model/view",
 		];
-		$err /** error_t */;
+		$err error_t;
 
 		foreach ($dirs as $dir) {
-			$entries /** vector<string> */ = [];
+			$entries vector<string> = [];
 			if (!take($entries, $err, fs_scan($dir))) {
 				echo "traverse_scan_failed:", $dir, "\n";
 				continue;

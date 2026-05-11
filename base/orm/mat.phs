@@ -3,7 +3,7 @@ namespace om3\base\orm;
 /** @lib-export */
 class orm_mat
 {
-	public $types /** vector<string> */ = [];
+	public $types vector<string> = [];
 	public ?string $mode = null;
 	public ?string $table = null;
 	public ?string $id_column = null;

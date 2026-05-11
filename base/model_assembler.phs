@@ -10,7 +10,7 @@ class model_cache_entry
 class property_hash_result
 {
 	public int $property_count = 0;
-	public $properties /** hash<om3\base\schema\model_property> */ = [];
+	public $properties hash<om3\base\schema\model_property> = [];
 }
 
 class traversal_entry
@@ -34,28 +34,28 @@ class orm_build_entry
 
 class string_list_box
 {
-	public $items /** vector<string> */ = [];
+	public $items vector<string> = [];
 }
 
 class mixed_hash_box
 {
-	public $items /** hash<mixed> */ = [];
+	public $items hash<mixed> = [];
 }
 
 class legacy_orm_build_entry
 {
 	public ?string $path = null;
 	public ?string $type_key = null;
-	public $type_data /** mixed */ = null;
+	public $type_data mixed = null;
 	public ?\om3\base\orm\orm_node_base $parent_node = null;
 }
 
 /** @lib-export */
 class model_assembler
 {
-	public $raw_models /** vector<model_cache_entry> */ = [];
-	public $assembled_models /** vector<model_cache_entry> */ = [];
-	public $errors /** vector<string> */ = [];
+	public $raw_models vector<model_cache_entry> = [];
+	public $assembled_models vector<model_cache_entry> = [];
+	public $errors vector<string> = [];
 
 	public function register_raw_model(
 		string $type_key,
@@ -139,8 +139,8 @@ class model_assembler
 			return;
 		}
 
-		$processed_plain_types /** hash<bool> */ = [];
-		$current_level /** vector<traversal_entry> */ = [];
+		$processed_plain_types hash<bool> = [];
+		$current_level vector<traversal_entry> = [];
 
 		$root_entry = new traversal_entry();
 		$root_entry->path = $root_path;
@@ -149,10 +149,10 @@ class model_assembler
 		$root_entry->has_custom = false;
 		$current_level[] = $root_entry;
 
-		$depth /** int */ = 0;
+		$depth int = 0;
 		while ((count($current_level) > 0) && ($depth < 16)) {
 			echo "depth=", $depth, "\n";
-			$next_level /** vector<traversal_entry> */ = [];
+			$next_level vector<traversal_entry> = [];
 
 			foreach ($current_level as $entry) {
 				$entry_path = $entry->path;
@@ -165,10 +165,10 @@ class model_assembler
 				echo "node:", $entry_path, ":", $entry_type, "\n";
 
 				foreach ($entry_model->properties as $property_name => $_property_unused) {
-					$property_key /** string */ = (string) $property_name;
-					$property = $entry_model->properties[$property_key];
+					$property_key = $property_name;
+					$property = $entry_model->properties[$property_name];
 					$property_path = $entry_path . "." . $property_key;
-					$property_type /** string */ = "scalar";
+					$property_type string = "scalar";
 					if ($property->type_name !== null) {
 						$property_type = $property->type_name;
 					}
@@ -253,7 +253,7 @@ class model_assembler
 		$root->properties = $root_model->properties;
 		$root->type_models[] = $root_model;
 
-		$current_level /** vector<orm_build_entry> */ = [];
+		$current_level vector<orm_build_entry> = [];
 		$root_entry = new orm_build_entry();
 		$root_entry->path = $root_path;
 		$root_entry->raw_type_key = $raw_type_key;
@@ -261,9 +261,9 @@ class model_assembler
 		$root_entry->parent_node = $root;
 		$current_level[] = $root_entry;
 
-		$depth /** int */ = 0;
+		$depth int = 0;
 		while ((count($current_level) > 0) && ($depth < $root->max_depth)) {
-			$next_level /** vector<orm_build_entry> */ = [];
+			$next_level vector<orm_build_entry> = [];
 
 			foreach ($current_level as $entry) {
 				$entry_path = $entry->path;
@@ -274,8 +274,8 @@ class model_assembler
 				}
 
 				foreach ($entry_model->properties as $property_name => $_property_unused) {
-					$property_key /** string */ = (string) $property_name;
-					$property = $entry_model->properties[$property_key];
+					$property_key = $property_name;
+					$property = $entry_model->properties[$property_name];
 					$property_path = $entry_path . "." . $property_key;
 					$child_type_name = $property->type_name;
 					if ($child_type_name === null || $child_type_name === "") {
@@ -400,21 +400,21 @@ class model_assembler
 
 		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
 			$node = $root->nodes[$node_index];
-				$child_types /** hash<vector<string>> */ = [];
+				$child_types hash<vector<string>> = [];
 				for ($child_index = 0; $child_index < count($node->children); $child_index++) {
 					$child = $node->children[$child_index];
 					if ($child->name === null || $child->type === null) {
 						continue;
 					}
 					if (!isset($child_types[$child->name])) {
-						$empty_list /** vector<string> */ = [];
+						$empty_list vector<string> = [];
 						$child_types[$child->name] = $empty_list;
 					}
 					$child_types[$child->name][] = $child->type;
 				}
 
 			foreach ($child_types as $child_name => $type_list) {
-				$unique_types /** hash<bool> */ = [];
+				$unique_types hash<bool> = [];
 				foreach ($type_list as $type_name) {
 					$unique_types[(string) $type_name] = true;
 				}
@@ -455,8 +455,8 @@ class model_assembler
 		$this->populate_legacy_visible_properties($root, $root_type_data, $type_map_box);
 		$root->type_models[] = $this->build_legacy_model_stub($root_type_key);
 
-		$current_level /** vector<legacy_orm_build_entry> */ = [];
-		$processed_plain_types /** hash<bool> */ = [];
+		$current_level vector<legacy_orm_build_entry> = [];
+		$processed_plain_types hash<bool> = [];
 		$root_entry = new legacy_orm_build_entry();
 		$root_entry->path = $root_type_key;
 		$root_entry->type_key = $root_type_key;
@@ -464,9 +464,9 @@ class model_assembler
 		$root_entry->parent_node = $root;
 		$current_level[] = $root_entry;
 
-		$depth /** int */ = 0;
+		$depth int = 0;
 		while ((count($current_level) > 0) && ($depth < $root->max_depth)) {
-			$next_level /** vector<legacy_orm_build_entry> */ = [];
+			$next_level vector<legacy_orm_build_entry> = [];
 
 			for ($entry_index = 0; $entry_index < count($current_level); $entry_index++) {
 				$entry = $current_level[$entry_index];
@@ -478,7 +478,7 @@ class model_assembler
 				}
 
 				foreach ($entry_type_data["properties"] as $property_name => $property_data) {
-					$property_key /** string */ = (string) $property_name;
+					$property_key string = (string) $property_name;
 					if (!$this->legacy_property_is_materialized($property_data)) {
 						continue;
 					}
@@ -499,7 +499,7 @@ class model_assembler
 						$child->materialization = $this->build_temp_materialization_from_legacy($property_key, $property_data, $entry_type_data, $type_map_box, $type_names_box);
 						$this->populate_legacy_mat_list($child, $property_key, $property_data, $entry_type_data, $type_map_box, $type_names_box);
 						$child->type = $this->resolve_common_legacy_type($type_names_box, $type_map_box);
-						$empty_properties /** hash<om3\base\schema\model_property> */ = [];
+						$empty_properties hash<om3\base\schema\model_property> = [];
 						$child->properties = $empty_properties;
 
 					$has_model_target = false;
@@ -578,22 +578,22 @@ class model_assembler
 		$effective = new property_hash_result();
 
 		foreach ($assembled->properties as $property_name => $typed_property) {
-			$override = $this->find_child_property($usage_property, (string) $property_name);
+			$override = $this->find_child_property($usage_property, $property_name);
 			if ($override !== null && $override->disabled) {
 				continue;
 			}
 
 			if ($override !== null) {
-				$effective->properties[(string) $property_name] = $this->merge_property($typed_property, $override);
+				$effective->properties[$property_name] = $this->merge_property($typed_property, $override);
 			} else {
-				$effective->properties[(string) $property_name] = $typed_property;
+				$effective->properties[$property_name] = $typed_property;
 			}
 			$effective->property_count = $effective->property_count + 1;
 		}
 
 		foreach ($usage_property->properties as $property_name => $_typed_override_unused) {
-			$override_key /** string */ = (string) $property_name;
-			$typed_override = $usage_property->properties[$override_key];
+			$override_key = $property_name;
+			$typed_override = $usage_property->properties[$property_name];
 			if ($typed_override->disabled) {
 				continue;
 			}
@@ -680,7 +680,7 @@ class model_assembler
 
 		$property_storage = $property->attached_storage;
 		$parent_storage = $parent_model->attached_storage;
-		$target_storage /** ?om3\base\schema\storage */ = null;
+		$target_storage ?om3\base\schema\storage = null;
 		if ($target_model !== null) {
 			$target_storage = $target_model->attached_storage;
 		}
@@ -946,7 +946,7 @@ class model_assembler
 		);
 		$legacy_column = $this->legacy_storage_string($property_storage, "column");
 		$one_to_many_owner_column = $this->legacy_storage_string($property_storage, "oneToMany");
-		$route_map /** hash<om3\base\orm\orm_mat> */ = [];
+		$route_map hash<om3\base\orm\orm_mat> = [];
 		for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
 			$type_name = $type_names->items[$type_index];
 			$table_name = "";
@@ -1116,7 +1116,7 @@ class model_assembler
 			$route_map["default"] = $item;
 		}
 
-		$route_index /** int */ = 0;
+		$route_index int = 0;
 		foreach ($route_map as $route) {
 			if (count($route->types) > 1 && $targets_models) {
 				$route->type_column = "\$_type";
@@ -1242,10 +1242,10 @@ class model_assembler
 
 	private function unique_strings(string_list_box $items): string_list_box
 	{
-		$seen /** hash<bool> */ = [];
+		$seen hash<bool> = [];
 		$out = new string_list_box();
 		foreach ($items->items as $item) {
-			$value /** string */ = (string) $item;
+			$value string = (string) $item;
 			if ($value === "" || isset($seen[$value])) {
 				continue;
 			}
@@ -1257,7 +1257,7 @@ class model_assembler
 
 	private function join_strings(string_list_box $items): string
 	{
-		$out /** string */ = "";
+		$out string = "";
 		for ($i = 0; $i < count($items->items); $i++) {
 			if ($i > 0) {
 				$out = $out . ",";
@@ -1270,7 +1270,7 @@ class model_assembler
 	private function load_legacy_type_map(string $dir): mixed_hash_box
 	{
 		$type_map = new mixed_hash_box();
-		$entries /** vector<string> */ = [];
+		$entries vector<string> = [];
 		$err /** error_t */;
 		if (!take($entries, $err, fs_scan($dir))) {
 			$this->errors[] = "legacy_scan_failed:" . $dir;
@@ -1308,7 +1308,7 @@ class model_assembler
 		mixed_hash_box $type_map
 	): void
 	{
-		$out /** hash<om3\base\schema\model_property> */ = [];
+		$out hash<om3\base\schema\model_property> = [];
 		if ($type_data === null || !isset($type_data["properties"])) {
 			$node->properties = $out;
 			return;
@@ -1548,7 +1548,7 @@ class model_assembler
 
 	private function is_legacy_scalar_type(string $type_name): bool
 	{
-		$scalar_types /** hash<bool> */ = [
+		$scalar_types hash<bool> = [
 			"string" => true,
 			"integer" => true,
 			"int" => true,
@@ -1651,25 +1651,25 @@ class model_assembler
 			$out->default = $override_property->default;
 		}
 
-		if ($override_property->property_count > 0) {
-			$effective = new property_hash_result();
+			if ($override_property->property_count > 0) {
+				$effective = new property_hash_result();
 
-			foreach ($base_property->properties as $property_name => $typed_property) {
-				$child_override = $this->find_child_property($override_property, (string) $property_name);
-				if ($child_override !== null && $child_override->disabled) {
-					continue;
+				foreach ($base_property->properties as $property_name => $typed_property) {
+					$child_override = $this->find_child_property($override_property, $property_name);
+					if ($child_override !== null && $child_override->disabled) {
+						continue;
+					}
+					if ($child_override !== null) {
+						$effective->properties[$property_name] = $this->merge_property($typed_property, $child_override);
+					} else {
+						$effective->properties[$property_name] = $this->clone_property($typed_property);
+					}
+					$effective->property_count = $effective->property_count + 1;
 				}
-				if ($child_override !== null) {
-					$effective->properties[(string) $property_name] = $this->merge_property($typed_property, $child_override);
-				} else {
-					$effective->properties[(string) $property_name] = $this->clone_property($typed_property);
-				}
-				$effective->property_count = $effective->property_count + 1;
-			}
 
-			foreach ($override_property->properties as $property_name => $_typed_property_unused) {
-				$override_key /** string */ = (string) $property_name;
-				$typed_property = $override_property->properties[$override_key];
+				foreach ($override_property->properties as $property_name => $_typed_property_unused) {
+					$override_key = $property_name;
+					$typed_property = $override_property->properties[$property_name];
 				if ($typed_property->disabled) {
 					continue;
 				}
@@ -1689,10 +1689,10 @@ class model_assembler
 
 	private function find_child_property(
 		\om3\base\schema\model_property $parent_property,
-		?string $property_name
+		string $property_name
 	): ?\om3\base\schema\model_property
 	{
-		if ($property_name === null || $property_name === "") {
+		if ($property_name === "") {
 			return null;
 		}
 		if (!isset($parent_property->properties[$property_name])) {

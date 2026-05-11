@@ -6,5 +6,5 @@ class db_database
 	public ?string $name = null;
 	public ?string $charset = null;
 	public ?string $collation = null;
-	public $tables /** hash<db_table> */ = [];
+	public $tables hash<db_table> = [];
 }

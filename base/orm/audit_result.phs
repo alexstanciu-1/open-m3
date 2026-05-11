@@ -3,8 +3,8 @@ namespace om3\base\orm;
 /** @lib-export */
 class orm_audit_result
 {
-	public $multi_type /** vector<orm_audit_entry> */ = [];
-	public $multi_table /** vector<orm_audit_entry> */ = [];
-	public $multi_column /** vector<orm_audit_entry> */ = [];
-	public $collection_table /** vector<orm_audit_entry> */ = [];
+	public $multi_type vector<orm_audit_entry> = [];
+	public $multi_table vector<orm_audit_entry> = [];
+	public $multi_column vector<orm_audit_entry> = [];
+	public $collection_table vector<orm_audit_entry> = [];
 }

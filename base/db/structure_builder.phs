@@ -19,10 +19,10 @@ class db_sub_materialization
 /** @lib-export */
 class structure_builder
 {
-	public $errors /** vector<string> */ = [];
+	public $errors vector<string> = [];
 	public bool $legacy_full_support = false;
-	private $orm_primary_tables /** hash<string> */ = [];
-	private $orm_suppressed_tables /** hash<string> */ = [];
+	private $orm_primary_tables hash<string> = [];
+	private $orm_suppressed_tables hash<string> = [];
 
 	public function build_from_root(
 		\om3\base\assemble\model_assembler $assembler,
@@ -39,7 +39,7 @@ class structure_builder
 		$db = new db_database();
 		$db->name = "default";
 
-		$current_level /** vector<db_build_entry> */ = [];
+		$current_level vector<db_build_entry> = [];
 		$root_entry = new db_build_entry();
 		$root_entry->path = $root_path;
 		$root_entry->type_key = $root_type_key;
@@ -47,9 +47,9 @@ class structure_builder
 		$root_entry->effective_model = $root_model;
 		$current_level[] = $root_entry;
 
-		$depth /** int */ = 0;
+		$depth int = 0;
 		while ((count($current_level) > 0) && ($depth < 16)) {
-			$next_level /** vector<db_build_entry> */ = [];
+			$next_level vector<db_build_entry> = [];
 
 			foreach ($current_level as $entry) {
 				if ($entry->path === null || $entry->table_name === null || $entry->effective_model === null) {
@@ -64,8 +64,8 @@ class structure_builder
 				}
 
 				foreach ($entry->effective_model->properties as $property_name => $_property_unused) {
-					$property_key /** string */ = (string) $property_name;
-					$property = $entry->effective_model->properties[$property_key];
+					$property_key = $property_name;
+					$property = $entry->effective_model->properties[$property_name];
 					$usage_override = $this->find_child_property_override($entry->usage_property, $property_key);
 					$planning_property = ($usage_override !== null) ? $usage_override : $property;
 
@@ -131,9 +131,9 @@ class structure_builder
 	): ?db_database
 	{
 		$this->legacy_full_support = true;
-		$empty_primary_tables /** hash<string> */ = [];
+		$empty_primary_tables hash<string> = [];
 		$this->orm_primary_tables = $empty_primary_tables;
-		$empty_suppressed_tables /** hash<string> */ = [];
+		$empty_suppressed_tables hash<string> = [];
 		$this->orm_suppressed_tables = $empty_suppressed_tables;
 		$db = new db_database();
 		$db->name = "default";
@@ -175,13 +175,11 @@ class structure_builder
 	{
 		echo "database:", $db->name ?? "", "\n";
 		foreach ($db->tables as $table_name => $_table_unused) {
-			$table_key /** string */ = (string) $table_name;
-			$table = $db->tables[$table_key];
+			$table = $db->tables[$table_name];
 			echo "table:", $table->name ?? "", "\n";
 
 			foreach ($table->columns as $column_name => $_column_unused) {
-				$column_key /** string */ = (string) $column_name;
-				$column = $table->columns[$column_key];
+				$column = $table->columns[$column_name];
 				echo "column:", $table->name ?? "", ".", $column->name ?? "", ":", $column->type ?? "";
 				if (!$column->is_nullable) {
 					echo ":notnull";
@@ -193,8 +191,7 @@ class structure_builder
 			}
 
 			foreach ($table->indexes as $index_name => $_index_unused) {
-				$index_key /** string */ = (string) $index_name;
-				$index = $table->indexes[$index_key];
+				$index = $table->indexes[$index_name];
 				echo "index:", $table->name ?? "", ".", $index->name ?? "", ":", $index->kind ?? "";
 				if (count($index->columns) > 0) {
 					echo ":";
@@ -354,7 +351,7 @@ class structure_builder
 	private function inline_sub_columns(db_table $table, string $property_name, \om3\base\schema\model $child_model): void
 	{
 		foreach ($child_model->properties as $child_property_name => $_child_unused) {
-			$child_key /** string */ = (string) $child_property_name;
+			$child_key string = (string) $child_property_name;
 			$child_property = $child_model->properties[$child_key];
 			if ($child_property->type_name === null || $child_property->type_name === "") {
 				continue;
