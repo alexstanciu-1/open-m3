@@ -25,12 +25,19 @@ Read order:
 
 ## Current Build Guidance
 
-For the current Open M3 workspace on `scpp 0.1.36`:
+For the current Open M3 workspace on `scpp 0.1.42`:
 
-- standalone tool projects can usually be validated with `scpp build`
-- `base` and tools depending on `base` should currently be validated with `scpp build --build-dependencies`
+- use `scpp build` as the normal first validation command
+- `base` builds successfully with plain `scpp build`
+- dependent tools such as `tools/verify_model_loader` also build successfully with plain `scpp build`
+- `scpp build --build-dependencies` remains acceptable as a deeper dependency-refresh or diagnostic command, but it is no longer the default Open M3 workaround rule
 
 This is a current verification rule, not a source-style rule.
+
+Historical note:
+
+- earlier `scpp 0.1.36` workspace guidance required `scpp build --build-dependencies` for `base` and dependent tools because of entrypoint/dependency artifact failures
+- those failures no longer reproduce in the current `scpp 0.1.42` workspace state
 
 ## Current Simplification Guidance
 
@@ -41,6 +48,11 @@ For Open M3 cleanup passes:
 - simplify casts first at typed `hash<...>` foreach boundaries
 - keep explicit casts where Open M3 is normalizing mixed JSON or legacy imported data
 - re-test all affected `prism.json` projects after simplification
+
+Current note:
+
+- the `typed hash<> foreach` lowering fixes documented upstream around `scpp 0.1.41` reduce the need for some earlier defensive foreach-side stabilizations
+- Open M3 should still keep explicit normalization at mixed JSON and legacy metadata boundaries unless a local repro proves the cast is no longer needed
 
 ## Rule
 

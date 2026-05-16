@@ -1,0 +1,9 @@
+{
+  "table": "StoreLocations",
+  "properties": {
+    "Properties": {
+      "relation.type": "many_to_many",
+      "relation.reverse": "StoreLocations"
+    }
+  }
+}

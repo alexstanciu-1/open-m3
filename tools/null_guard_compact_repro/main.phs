@@ -1,0 +1,27 @@
+namespace om3\tools\null_guard_compact_repro;
+
+class child_state
+{
+	public ?string $name = null;
+}
+
+class root_state
+{
+	public ?child_state $child = null;
+}
+
+function test_guard(?root_state $root): void
+{
+	$match = ($root === null || $root->child === null || $root->child->name === null) ? "no" : "yes";
+	echo "match=", $match, "\n";
+}
+
+$full = new root_state();
+$full->child = new child_state();
+$full->child->name = "ok";
+test_guard($full);
+
+$missing_child = new root_state();
+test_guard($missing_child);
+
+test_guard(null);

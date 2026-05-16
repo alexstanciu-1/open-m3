@@ -169,18 +169,15 @@ class orm_audit_sample
 
 	private static function print_generated_tables_tsv(\om3\base\db\db_database $db): void
 	{
-		foreach ($db->tables as $table_name => $_unused) {
-			$table = $db->tables[$table_name];
+		foreach ($db->tables as $table_name => $table) {
 			echo self::tsv_field($table->name ?? ""), "\n";
 		}
 	}
 
 	private static function print_generated_columns_tsv(\om3\base\db\db_database $db): void
 	{
-		foreach ($db->tables as $table_name => $_unused_table) {
-			$table = $db->tables[$table_name];
-			foreach ($table->columns as $column_name => $_unused_column) {
-				$column = $table->columns[$column_name];
+		foreach ($db->tables as $table_name => $table) {
+			foreach ($table->columns as $column_name => $column) {
 				echo self::tsv_field($table->name ?? ""), "\t",
 					self::tsv_field($column->name ?? ""), "\t",
 					self::tsv_field($column->type ?? ""), "\t",

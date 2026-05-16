@@ -164,9 +164,8 @@ class model_assembler
 
 				echo "node:", $entry_path, ":", $entry_type, "\n";
 
-				foreach ($entry_model->properties as $property_name => $_property_unused) {
+				foreach ($entry_model->properties as $property_name => $property) {
 					$property_key = $property_name;
-					$property = $entry_model->properties[$property_name];
 					$property_path = $entry_path . "." . $property_key;
 					$property_type string = "scalar";
 					if ($property->type_name !== null) {
@@ -273,9 +272,8 @@ class model_assembler
 					continue;
 				}
 
-				foreach ($entry_model->properties as $property_name => $_property_unused) {
+				foreach ($entry_model->properties as $property_name => $property) {
 					$property_key = $property_name;
-					$property = $entry_model->properties[$property_name];
 					$property_path = $entry_path . "." . $property_key;
 					$child_type_name = $property->type_name;
 					if ($child_type_name === null || $child_type_name === "") {
@@ -423,7 +421,7 @@ class model_assembler
 					$entry->path = $node->path;
 					$entry->name = (string) $child_name;
 					$entry->count = count($unique_types);
-					foreach ($unique_types as $type_name => $_unused_flag) {
+					foreach ($unique_types as $type_name => $unused_flag) {
 						$entry->values[] = (string) $type_name;
 					}
 					$result->multi_type[] = $entry;
@@ -591,9 +589,8 @@ class model_assembler
 			$effective->property_count = $effective->property_count + 1;
 		}
 
-		foreach ($usage_property->properties as $property_name => $_typed_override_unused) {
+		foreach ($usage_property->properties as $property_name => $typed_override) {
 			$override_key = $property_name;
-			$typed_override = $usage_property->properties[$property_name];
 			if ($typed_override->disabled) {
 				continue;
 			}
@@ -685,33 +682,39 @@ class model_assembler
 			$target_storage = $target_model->attached_storage;
 		}
 
-		if ($property_storage !== null && $property_storage->relation_table !== null && $property_storage->relation_table !== "") {
-			$tables->items[] = $property_storage->relation_table;
-			$out->via_collection_table = $property->type_list;
-		}
+		if ($property_storage !== null) {
+			if ($property_storage->relation_table !== null && $property_storage->relation_table !== "") {
+				$tables->items[] = $property_storage->relation_table;
+				$out->via_collection_table = $property->type_list;
+			}
 
-		if ($property_storage !== null && $property_storage->relation_this_column !== null && $property_storage->relation_this_column !== "") {
-			$columns->items[] = $property_storage->relation_this_column;
-		}
-		if ($property_storage !== null && $property_storage->relation_target_column !== null && $property_storage->relation_target_column !== "") {
-			$columns->items[] = $property_storage->relation_target_column;
-		}
-		if ($property_storage !== null && $property_storage->column !== null && $property_storage->column !== "") {
-			$columns->items[] = $property_storage->column;
+			if ($property_storage->relation_this_column !== null && $property_storage->relation_this_column !== "") {
+				$columns->items[] = $property_storage->relation_this_column;
+			}
+			if ($property_storage->relation_target_column !== null && $property_storage->relation_target_column !== "") {
+				$columns->items[] = $property_storage->relation_target_column;
+			}
+			if ($property_storage->column !== null && $property_storage->column !== "") {
+				$columns->items[] = $property_storage->column;
+			}
 		}
 
 		if ($property->struct_sub) {
 			if ($property_storage !== null && $property_storage->kind === "inline") {
 				$out->mode = "inline";
-				if ($parent_storage !== null && $parent_storage->table !== null && $parent_storage->table !== "") {
-					$tables->items[] = $parent_storage->table;
+				if ($parent_storage !== null) {
+					if ($parent_storage->table !== null && $parent_storage->table !== "") {
+						$tables->items[] = $parent_storage->table;
+					}
 				}
 			} else if ($property_storage !== null && $property_storage->relation_table !== null && $property_storage->relation_table !== "") {
 				$out->mode = "custom_table";
 			} else {
 				$out->mode = "type_table";
-				if ($target_storage !== null && $target_storage->table !== null && $target_storage->table !== "") {
-					$tables->items[] = $target_storage->table;
+				if ($target_storage !== null) {
+					if ($target_storage->table !== null && $target_storage->table !== "") {
+						$tables->items[] = $target_storage->table;
+					}
 				} else if ($property->type_name !== null) {
 					$tables->items[] = $this->infer_default_table_name($property->type_name);
 				}
@@ -727,8 +730,10 @@ class model_assembler
 			if (count($columns->items) <= 0 && $property->name !== null) {
 				$columns->items[] = $property->name . "_id";
 			}
-			if ($target_storage !== null && $target_storage->table !== null && $target_storage->table !== "") {
-				$tables->items[] = $target_storage->table;
+			if ($target_storage !== null) {
+				if ($target_storage->table !== null && $target_storage->table !== "") {
+					$tables->items[] = $target_storage->table;
+				}
 			}
 		} else {
 			if ($property->type_list) {
@@ -741,8 +746,10 @@ class model_assembler
 			if (count($columns->items) <= 0 && $property->name !== null) {
 				$columns->items[] = $property->name;
 			}
-			if ($parent_storage !== null && $parent_storage->table !== null && $parent_storage->table !== "") {
-				$tables->items[] = $parent_storage->table;
+			if ($parent_storage !== null) {
+				if ($parent_storage->table !== null && $parent_storage->table !== "") {
+					$tables->items[] = $parent_storage->table;
+				}
 			}
 		}
 
@@ -876,14 +883,58 @@ class model_assembler
 	{
 		$probe = $this->build_temp_materialization($property, $parent_model, $target_model);
 		$item = new \om3\base\orm\orm_mat();
+		$property_storage = $property->attached_storage;
+		$relation_type = $this->normalize_openm3_relation_type($property_storage);
+		$targets_model = ($target_model !== null);
+		$has_explicit_relation_table = false;
+		if ($property_storage !== null) {
+			$has_explicit_relation_table = (
+				$property_storage->relation_table !== null &&
+				$property_storage->relation_table !== ""
+			);
+		}
 		if ($property->type_name !== null && $property->type_name !== "") {
 			$item->types[] = $property->type_name;
 		}
-		$item->mode = $probe->mode;
-
 		$tables = $this->csv_to_unique_strings($probe->tables_csv);
 		$columns = $this->csv_to_unique_strings($probe->columns_csv);
-		if ($probe->mode === "collection_table" || $probe->mode === "join_table") {
+		if ($property->type_list && $targets_model) {
+			if ($has_explicit_relation_table) {
+				$item->mode = ($relation_type === "many_to_many") ? "join_table" : "collection_table";
+				if (count($tables->items) > 0) {
+					$item->link_table = $tables->items[0];
+				}
+				if (count($columns->items) > 0) {
+					$item->owner_column = $columns->items[0];
+					$item->link_left = $columns->items[0];
+				}
+				if (count($columns->items) > 1) {
+					$item->id_column = $columns->items[1];
+					$item->link_right = $columns->items[1];
+				} else {
+					$item->id_column = "\$id";
+					$item->link_right = "\$id";
+				}
+			} else if ($relation_type === "many_to_many") {
+				$canonical_many_to_many = $this->resolve_openm3_many_to_many_identity($parent_model, $property, $target_model, $tables, $columns);
+				$item->mode = "join_table";
+				$item->link_table = $canonical_many_to_many->table;
+				$item->owner_column = $canonical_many_to_many->owner_column;
+				$item->link_left = $canonical_many_to_many->owner_column;
+				$item->id_column = $canonical_many_to_many->id_column;
+				$item->link_right = $canonical_many_to_many->id_column;
+			} else {
+				$item->mode = "one_to_many";
+				if (count($tables->items) > 0) {
+					$item->table = $tables->items[0];
+				}
+				if (count($columns->items) > 0) {
+					$item->owner_column = $columns->items[0];
+				}
+				$item->id_column = "\$id";
+			}
+		} else if ($probe->mode === "collection_table" || $probe->mode === "join_table") {
+			$item->mode = ($relation_type === "many_to_many") ? "join_table" : $probe->mode;
 			if (count($tables->items) > 0) {
 				$item->link_table = $tables->items[0];
 			}
@@ -894,6 +945,7 @@ class model_assembler
 				$item->link_right = $columns->items[1];
 			}
 		} else {
+			$item->mode = $probe->mode;
 			if (count($tables->items) > 0) {
 				$item->table = $tables->items[0];
 			}
@@ -910,6 +962,203 @@ class model_assembler
 		for ($type_index = 0; $type_index < count($item->types); $type_index++) {
 			$node->mat_by_type[$item->types[$type_index]] = 0;
 		}
+	}
+
+	private function resolve_openm3_many_to_many_identity(
+		\om3\base\schema\model $parent_model,
+		\om3\base\schema\model_property $property,
+		\om3\base\schema\model $target_model,
+		string_list_box $tables,
+		string_list_box $columns
+	): \om3\base\orm\orm_mat
+	{
+		$paired = $this->resolve_openm3_many_to_many_identity_from_reverse($parent_model, $property, $target_model);
+		if ($paired !== null) {
+			return $paired;
+		}
+
+		$out = new \om3\base\orm\orm_mat();
+		if (count($tables->items) > 0) {
+			$out->table = $tables->items[0];
+		}
+		if (count($columns->items) > 0) {
+			$out->owner_column = $columns->items[0];
+		}
+		if (count($columns->items) > 1) {
+			$out->id_column = $columns->items[1];
+		}
+
+		if ($out->table !== null && $out->table !== "" && $out->owner_column !== null && $out->owner_column !== "" && $out->id_column !== null && $out->id_column !== "") {
+			return $out;
+		}
+
+		$left_singular = $this->canonical_relation_column_name_from_type($parent_model->name);
+		$right_singular = $this->canonical_relation_column_name_from_type($target_model->name);
+		$left_plural = $this->canonical_relation_table_part_from_type($parent_model->name);
+		$right_plural = $this->canonical_relation_table_part_from_type($target_model->name);
+
+		$pair hash<string> = [];
+		$pair[$left_plural] = $left_singular;
+		$pair[$right_plural] = $right_singular;
+		$resolved_left_plural = $left_plural;
+		$resolved_right_plural = $right_plural;
+		if ($resolved_left_plural > $resolved_right_plural) {
+			$tmp_plural = $resolved_left_plural;
+			$resolved_left_plural = $resolved_right_plural;
+			$resolved_right_plural = $tmp_plural;
+		}
+		$resolved_left_singular = isset($pair[$resolved_left_plural]) ? $pair[$resolved_left_plural] : $left_singular;
+		$resolved_right_singular = isset($pair[$resolved_right_plural]) ? $pair[$resolved_right_plural] : $right_singular;
+
+		if ($out->table === null || $out->table === "") {
+			$out->table = $resolved_left_plural . "_" . $resolved_right_plural;
+		}
+		if ($out->owner_column === null || $out->owner_column === "") {
+			$out->owner_column = $resolved_left_singular;
+		}
+		if ($out->id_column === null || $out->id_column === "") {
+			$out->id_column = $resolved_right_singular;
+		}
+		return $out;
+	}
+
+	private function resolve_openm3_many_to_many_identity_from_reverse(
+		\om3\base\schema\model $parent_model,
+		\om3\base\schema\model_property $property,
+		\om3\base\schema\model $target_model
+	): ?\om3\base\orm\orm_mat
+	{
+		$property_storage = $property->attached_storage;
+		if ($property_storage === null || $property_storage->relation_reverse === null || $property_storage->relation_reverse === "") {
+			return null;
+		}
+
+		$reverse_name = $property_storage->relation_reverse;
+		if (!isset($target_model->properties[$reverse_name])) {
+			$this->errors[] = "many_to_many_reverse_missing:" . (($parent_model->name ?? "") . "." . ($property->name ?? "") . "->" . $reverse_name);
+			return null;
+		}
+
+		$reverse_property = $target_model->properties[$reverse_name];
+		$reverse_storage = $reverse_property->attached_storage;
+		if ($reverse_storage === null) {
+			return null;
+		}
+		if ($this->normalize_openm3_relation_type($reverse_storage) !== "many_to_many") {
+			$this->errors[] = "many_to_many_reverse_not_many_to_many:" . (($target_model->name ?? "") . "." . $reverse_name);
+			return null;
+		}
+
+		$out = new \om3\base\orm\orm_mat();
+		if ($reverse_storage->relation_table !== null && $reverse_storage->relation_table !== "") {
+			$out->table = $reverse_storage->relation_table;
+		} else if ($property_storage->relation_table !== null && $property_storage->relation_table !== "") {
+			$out->table = $property_storage->relation_table;
+		}
+
+		if ($reverse_storage->relation_target_column !== null && $reverse_storage->relation_target_column !== "") {
+			$out->owner_column = $reverse_storage->relation_target_column;
+		} else if ($property_storage->relation_this_column !== null && $property_storage->relation_this_column !== "") {
+			$out->owner_column = $property_storage->relation_this_column;
+		}
+
+		if ($reverse_storage->relation_this_column !== null && $reverse_storage->relation_this_column !== "") {
+			$out->id_column = $reverse_storage->relation_this_column;
+		} else if ($property_storage->relation_target_column !== null && $property_storage->relation_target_column !== "") {
+			$out->id_column = $property_storage->relation_target_column;
+		}
+
+		$current_type_name = $reverse_property->type_name;
+		if ($current_type_name === null || $current_type_name === "") {
+			$current_type_name = $parent_model->name;
+		}
+		$target_type_name = $property->type_name;
+		if ($target_type_name === null || $target_type_name === "") {
+			$target_type_name = $target_model->name;
+		}
+
+		$current_singular = $this->canonical_relation_column_name_from_type($current_type_name);
+		$target_singular = $this->canonical_relation_column_name_from_type($target_type_name);
+		$current_plural = $this->canonical_relation_table_part_from_type($current_type_name);
+		$target_plural = $this->canonical_relation_table_part_from_type($target_type_name);
+
+		$pair hash<string> = [];
+		$pair[$current_plural] = $current_singular;
+		$pair[$target_plural] = $target_singular;
+		$resolved_left_plural = $current_plural;
+		$resolved_right_plural = $target_plural;
+		if ($resolved_left_plural > $resolved_right_plural) {
+			$tmp_plural = $resolved_left_plural;
+			$resolved_left_plural = $resolved_right_plural;
+			$resolved_right_plural = $tmp_plural;
+		}
+		$resolved_left_singular = isset($pair[$resolved_left_plural]) ? $pair[$resolved_left_plural] : $current_singular;
+		$resolved_right_singular = isset($pair[$resolved_right_plural]) ? $pair[$resolved_right_plural] : $target_singular;
+
+		if ($out->table === null || $out->table === "") {
+			$out->table = $resolved_left_plural . "_" . $resolved_right_plural;
+		}
+		if ($out->owner_column === null || $out->owner_column === "") {
+			$out->owner_column = $resolved_left_singular;
+		}
+		if ($out->id_column === null || $out->id_column === "") {
+			$out->id_column = $resolved_right_singular;
+		}
+		return $out;
+	}
+
+	private function normalize_openm3_relation_type(?\om3\base\schema\storage_property $property_storage): string
+	{
+		if ($property_storage === null) {
+			return "";
+		}
+		if ($property_storage->relation_type === null) {
+			return "";
+		}
+
+		$relation_type = strtolower(trim($property_storage->relation_type));
+		if ($relation_type === "many_to_many" || $relation_type === "manytomany") {
+			return "many_to_many";
+		}
+		if ($relation_type === "one_to_many" || $relation_type === "onetomany") {
+			return "one_to_many";
+		}
+		return $relation_type;
+	}
+
+	private function canonical_relation_column_name_from_type(?string $type_name): string
+	{
+		if ($type_name === null || $type_name === "") {
+			return "Item";
+		}
+		$parts = explode("/", $type_name);
+		$last = (string) $parts[count($parts) - 1];
+		$segments = explode("_", $last);
+		$out vector<string> = [];
+		for ($i = 0; $i < count($segments); $i++) {
+			$segment = trim($segments[$i]);
+			if ($segment === "") {
+				continue;
+			}
+			$out[] = ucfirst($segment);
+		}
+		return (count($out) > 0) ? implode("_", $out) : "Item";
+	}
+
+	private function canonical_relation_table_part_from_type(?string $type_name): string
+	{
+		$singular = $this->canonical_relation_column_name_from_type($type_name);
+		if ($singular === "Company") {
+			return "Companies";
+		}
+		if ($singular === "Address") {
+			return "Addresses";
+		}
+		$len = strlen($singular);
+		if ($len > 1 && substr($singular, $len - 1, 1) === "y") {
+			return substr($singular, 0, $len - 1) . "ies";
+		}
+		return $singular . "s";
 	}
 
 	private function populate_legacy_mat_list(
@@ -1611,7 +1860,7 @@ class model_assembler
 		$out->attached_storage = $source->attached_storage;
 		$out->property_count = $source->property_count;
 		foreach ($source->properties as $property_name => $typed_property) {
-			$out->properties[(string) $property_name] = $this->clone_property($typed_property);
+			$out->properties[$property_name] = $this->clone_property($typed_property);
 		}
 		return $out;
 	}
@@ -1667,9 +1916,8 @@ class model_assembler
 					$effective->property_count = $effective->property_count + 1;
 				}
 
-				foreach ($override_property->properties as $property_name => $_typed_property_unused) {
+				foreach ($override_property->properties as $property_name => $typed_property) {
 					$override_key = $property_name;
-					$typed_property = $override_property->properties[$property_name];
 				if ($typed_property->disabled) {
 					continue;
 				}

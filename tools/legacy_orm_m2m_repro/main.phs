@@ -1,0 +1,126 @@
+namespace om3\tools\legacy_orm_m2m_repro;
+
+function print_node_mat(string $label, \om3\base\orm\orm_root $root, string $path): void
+{
+	$found = false;
+	for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+		$node = $root->nodes[$node_index];
+		if ($node->path !== $path) {
+			continue;
+		}
+
+		$found = true;
+		echo "--node:", $label, "--\n";
+		echo "path=", ($node->path ?? ""), "\n";
+		echo "name=", ($node->name ?? ""), "\n";
+		echo "branch_kind=", ($node->branch_kind ?? ""), "\n";
+		echo "is_list=", ($node->is_list ? "1" : "0"), "\n";
+		for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+			$mat = $node->mat[$mat_index];
+			echo "mat:", $mat_index,
+				"|mode=", ($mat->mode ?? ""),
+				"|table=", ($mat->table ?? ""),
+				"|link_table=", ($mat->link_table ?? ""),
+				"|owner_column=", ($mat->owner_column ?? ""),
+				"|id_column=", ($mat->id_column ?? ""),
+				"|value_column=", ($mat->value_column ?? ""),
+				"|type_column=", ($mat->type_column ?? "");
+			if (count($mat->types) > 0) {
+				echo "|types=";
+				for ($type_index = 0; $type_index < count($mat->types); $type_index++) {
+					if ($type_index > 0) {
+						echo ",";
+					}
+					echo $mat->types[$type_index];
+				}
+			}
+			echo "\n";
+		}
+	}
+
+	if (!$found) {
+		echo "--node:", $label, "--\n";
+		echo "not_found=", $path, "\n";
+		echo "--path-hints--\n";
+		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
+			$node = $root->nodes[$node_index];
+			$node_path = $node->path ?? "";
+			if (
+				(strpos($node_path, "OfferGroup") !== false) ||
+				(strpos($node_path, "Hotel") !== false) ||
+				(strpos($node_path, "CharterOffersGroups") !== false) ||
+				(strpos($node_path, "Hotels") !== false)
+			) {
+				echo $node_path, "\n";
+			}
+		}
+	}
+}
+
+function print_relation_table(\om3\base\db\db_database $db, string $table_name): void
+{
+	echo "--relation-table:", $table_name, "--\n";
+	if (!isset($db->tables[$table_name])) {
+		echo "missing_table\n";
+		return;
+	}
+
+	$table = $db->tables[$table_name];
+	foreach ($table->columns as $column_name => $column) {
+		echo "column:", ($column->name ?? ""), ":", ($column->type ?? "");
+		if (!$column->is_nullable) {
+			echo ":notnull";
+		}
+		if ($column->auto_increment) {
+			echo ":autoincrement";
+		}
+		echo "\n";
+	}
+}
+
+function run_case(string $label, string $root_class, string $path): void
+{
+	$assembler = new \om3\base\assemble\model_assembler();
+	$root = $assembler->build_legacy_orm_root(
+		"/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/travelfuse/public_html/code/temp/types_json",
+		$root_class
+	);
+
+	echo "==case:", $label, "==\n";
+	if ($root === null) {
+		echo "root_build_failed\n";
+		foreach ($assembler->errors as $error) {
+			echo $error, "\n";
+		}
+		return;
+	}
+
+	echo "root_path=", ($root->path ?? ""), "\n";
+	echo "nodes=", count($root->nodes), "\n";
+	print_node_mat($label, $root, $path);
+
+	$db_builder = new \om3\base\db\structure_builder();
+	$db = $db_builder->build_from_orm_root($root);
+	if ($db === null) {
+		echo "schema_build_failed\n";
+		foreach ($db_builder->errors as $error) {
+			echo $error, "\n";
+		}
+		return;
+	}
+
+	print_relation_table($db, "Offers_Groups_Hotels");
+	echo "schema_errors=", count($db_builder->errors), "\n";
+}
+
+run_case(
+	"offer_group_hotels",
+	"Omi\\TF\\OfferGroup",
+	"Omi/TF/OfferGroup.Hotels"
+);
+
+run_case(
+	"hotel_charter_offer_groups",
+	"Omi\\Travel\\Merch\\Hotel",
+	"Omi/Travel/Merch/Hotel.CharterOffersGroups"
+);

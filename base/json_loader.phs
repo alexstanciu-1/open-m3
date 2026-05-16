@@ -81,8 +81,8 @@ class json_loader
 		$storage_def->owner_model = $model_def;
 
 		foreach ($model_def->properties as $property_name => $model_property_def) {
-			$property_key string = (string) $property_name;
-			$typed_model_property = $model_def->properties[$property_key];
+			$property_key string = $property_name;
+			$typed_model_property = $model_property_def;
 			$storage_property_def = self::find_storage_property($storage_def, $property_key);
 			if ($storage_property_def !== null) {
 				$typed_model_property->attached_storage = $storage_property_def;
@@ -162,6 +162,9 @@ class json_loader
 		}
 		if (isset($property_data["relation.type"])) {
 			$out->relation_type = (string) $property_data["relation.type"];
+		}
+		if (isset($property_data["relation.reverse"])) {
+			$out->relation_reverse = (string) $property_data["relation.reverse"];
 		}
 		if (isset($property_data["relation.table"])) {
 			$out->relation_table = (string) $property_data["relation.table"];

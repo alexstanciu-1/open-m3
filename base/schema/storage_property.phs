@@ -10,6 +10,7 @@ class storage_property
 	public mixed $default = null;
 	public mixed $index = null;
 	public ?string $relation_type = null;
+	public ?string $relation_reverse = null;
 	public ?string $relation_table = null;
 	public ?string $relation_this_column = null;
 	public ?string $relation_target_column = null;

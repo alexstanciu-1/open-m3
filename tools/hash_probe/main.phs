@@ -36,11 +36,10 @@ echo "\n";
 echo "pairs=";
 $first = true;
 foreach ($items as $key => $value) {
-	$typed_value item = $value;
 	if (!$first) {
 		echo ",";
 	}
-	echo $key, ":", $typed_value->value;
+	echo $key, ":", $value->value;
 	$first = false;
 }
 echo "\n";

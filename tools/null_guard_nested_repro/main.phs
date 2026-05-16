@@ -1,0 +1,34 @@
+namespace om3\tools\null_guard_nested_repro;
+
+class child_state
+{
+	public ?string $name = null;
+}
+
+class root_state
+{
+	public ?child_state $child = null;
+}
+
+function test_guard(?root_state $root): void
+{
+	$match = "yes";
+	if ($root === null) {
+		$match = "no";
+	} else if ($root->child === null) {
+		$match = "no";
+	} else if ($root->child->name === null) {
+		$match = "no";
+	}
+	echo "match=", $match, "\n";
+}
+
+$full = new root_state();
+$full->child = new child_state();
+$full->child->name = "ok";
+test_guard($full);
+
+$missing_child = new root_state();
+test_guard($missing_child);
+
+test_guard(null);

@@ -19,19 +19,31 @@ Operational rule:
 - use the default installed `scpp` command
 - do not rely on a repo-local Simple C++ checkout path in Open M3 docs or workflows
 
-The current upstream release page shows newer releases through:
+The current local installed tool version is:
 
-- `v0.1.6` published on 2026-05-02
+- `scpp 0.1.42`
+
+Current upstream release notes relevant to this repo include:
+
+- `v0.1.41`
+- `v0.1.42`
 
 ## What Matters From Recent Simple C++ Releases
 
-Relevant release notes between the older local state and `v0.1.6` include:
+Relevant release notes in the currently observed upgrade range include:
 
 - runtime and lowering fixes for mixed-object `foreach`
 - by-reference `foreach` support on the shared runtime path
 - same-namespace forward declaration cycle fixes
 - CLI entrypoint helper fixes for `$argc`, `$argv`, `cli_argc()`, and `cli_argv()`
 - canonical `.phs` frontend handling in the current upstream default frontend surface while keeping `.php` compatibility
+- typed `hash<> foreach` lowering fixes for non-`this` method-call sources and locals initialized from them
+- typed `hash<> foreach` regression coverage and planning notes in `v0.1.42`
+
+Current Open M3 observation:
+
+- the older `undefined symbol: main` and missing `__deps/.../*.o` failures seen on `0.1.36` no longer reproduce on the current tool version
+- Open M3 should avoid preserving those historical workarounds as active workflow rules
 
 ## Open M3 Rule
 

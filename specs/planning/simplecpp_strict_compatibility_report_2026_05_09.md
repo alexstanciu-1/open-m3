@@ -1,6 +1,12 @@
 # SimpleC++ Strict Compatibility Report
 
-Status: active workaround report
+Historical note:
+
+- this document captures the `scpp 0.1.22` compatibility pass and its then-current workaround set
+- do not treat its workaround sections as active Open M3 workflow without revalidation on the current installed `scpp`
+- several items recorded here were later fixed upstream or no longer reproduce on newer local tool versions
+
+Status: historical workaround report
 
 Date: 2026-05-09
 
@@ -82,6 +88,11 @@ Reason:
   - `undefined symbol: main`
 - the file is meant to be the executable entrypoint, not a namespaced library unit
 
+Current note:
+
+- this should be read as a historical compatibility decision from the older failing period
+- the specific `undefined symbol: main` issue discussed in later `0.1.36` notes no longer reproduces on the current local `scpp`
+
 ### 5. Kept `require_once "... .hpp"` includes in `.phs`
 
 Current code still uses lines such as:
@@ -122,6 +133,11 @@ After the repo-side fixes above, these projects build successfully:
 
 ## Workarounds Needed
 
+Historical note:
+
+- the workaround list below reflects the repo state during the `0.1.22` transition
+- some items may no longer be necessary on current tool versions
+
 ### Workaround A: restore local `simple_cpp` symlink
 
 Local symlink restored:
@@ -161,7 +177,16 @@ This was used only to separate:
 
 This is not a normal workflow and should not remain necessary.
 
+Current note:
+
+- Open M3 should prefer current revalidation before assuming any of these workaround sections are still operationally required
+
 ## Remaining SimpleC++ Bugs
+
+Historical note:
+
+- the bug list below is historically valuable, but not all items are still current
+- re-check against the installed `scpp` version before filing or reusing any of these as active bug claims
 
 ### 1. Top-level `const` declaration generator bug
 

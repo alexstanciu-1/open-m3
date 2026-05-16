@@ -21,12 +21,16 @@ Use this skill for Open M3 strict-mode `.phs` work.
 
 ## Current OM3 Build Rule
 
-For the current Open M3 workspace state on `scpp 0.1.36`:
+For the current Open M3 workspace state on `scpp 0.1.42`:
 
-- standalone OM3 tools can usually be checked with `scpp build`
-- `base` and tools that depend on `base` should currently be validated with `scpp build --build-dependencies`
+- use `scpp build` as the normal first validation command
+- `base` can be checked with `scpp build`
+- tools that depend on `base`, including `tools/verify_model_loader`, also currently build successfully with `scpp build`
+- use `scpp build --build-dependencies` when you intentionally want a fuller dependency rebuild or when diagnosing dependency-state issues
 
-This is a workflow workaround for the current dependency materialization behavior, not a permanent authored-code rule.
+Historical note:
+
+- the earlier `scpp 0.1.36` workaround of preferring `scpp build --build-dependencies` for `base` and dependent tools should now be treated as historical, not current default guidance
 
 ## Simplification Guidance
 
@@ -41,5 +45,7 @@ When updating OM3 strict code after toolchain improvements:
 ## Validation
 
 - For standalone tool projects: run `scpp build`
-- For `base` or any project depending on `base`: run `scpp build --build-dependencies`
+- For `base`: run `scpp build`
+- For tools depending on `base`: start with `scpp build`
+- Use `scpp build --build-dependencies` when you want deeper dependency refresh/diagnosis
 - If a simplification affects shared `base` code, re-test all OM3 `prism.json` projects

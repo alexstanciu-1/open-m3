@@ -1,0 +1,13 @@
+{
+  "name": "Property",
+  "properties": {
+    "Name": {
+      "type.name": "string"
+    },
+    "StoreLocations": {
+      "type.name": "StoreLocation",
+      "type.list": true,
+      "struct.ref": "StoreLocations"
+    }
+  }
+}
