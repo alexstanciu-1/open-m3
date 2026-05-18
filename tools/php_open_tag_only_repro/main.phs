@@ -1,0 +1,5 @@
+<?php
+
+namespace om3\tools\php_open_tag_only_repro;
+
+echo "ok\n";

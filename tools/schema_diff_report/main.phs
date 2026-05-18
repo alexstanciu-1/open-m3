@@ -1,0 +1,72 @@
+namespace om3\tools\schema_diff_report;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$root_class = "Omi\\App";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+		$app_root = $assembler->build_legacy_orm_root($dir, $root_class);
+		if ($app_root === null) {
+			echo "build_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		$db_builder = new \om3\base\db\structure_builder();
+		$db = $db_builder->begin_legacy_orm_database();
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		$root_key = self::normalize_legacy_type_name_local($root_class);
+
+		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
+			$type_name = $all_types->items[$type_index];
+			if ($root_key !== null && $type_name == $root_key) {
+				continue;
+			}
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name);
+			if ($type_root === null) {
+				continue;
+			}
+			$db_builder->append_orm_root_to_database($db, $type_root);
+		}
+
+		$db_builder->append_orm_root_to_database($db, $app_root);
+
+		echo "--tables--\n";
+		foreach ($db->tables as $table_name => $table) {
+			echo $table->name ?? "", "\n";
+		}
+		echo "--columns--\n";
+		foreach ($db->tables as $table_name => $table) {
+			foreach ($table->columns as $column_name => $column) {
+				echo ($table->name ?? ""), "\t", ($column->name ?? ""), "\t", ($column->type ?? ""), "\n";
+			}
+		}
+		echo "--errors--\n";
+		foreach ($db_builder->errors as $error) {
+			echo $error, "\n";
+		}
+	}
+
+	private static function normalize_legacy_type_name_local(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$trimmed = trim($type_name);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
+	}
+}
+
+\om3\tools\schema_diff_report\main::run();

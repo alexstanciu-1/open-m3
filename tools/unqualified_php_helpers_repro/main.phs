@@ -1,0 +1,9 @@
+namespace om3\tools\unqualified_php_helpers_repro;
+
+$value = trim("  Hello  ");
+$lower = strtolower($value);
+$head = substr($lower, 0, 2);
+$parts = explode("e", $lower);
+
+echo $head, "\n";
+echo count($parts), "\n";

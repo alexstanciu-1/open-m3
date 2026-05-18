@@ -130,6 +130,13 @@ class structure_builder
 		\om3\base\orm\orm_root $root
 	): ?db_database
 	{
+		$db = $this->begin_legacy_orm_database();
+		$this->append_orm_root_to_database($db, $root);
+		return $db;
+	}
+
+	public function begin_legacy_orm_database(): db_database
+	{
 		$this->legacy_full_support = true;
 		$empty_primary_tables hash<string> = [];
 		$this->orm_primary_tables = $empty_primary_tables;
@@ -139,11 +146,18 @@ class structure_builder
 		$this->orm_relation_identities = $empty_relation_identities;
 		$db = new db_database();
 		$db->name = "default";
+		return $db;
+	}
 
+	public function append_orm_root_to_database(
+		db_database $db,
+		\om3\base\orm\orm_root $root
+	): void
+	{
 		$root_table_name = $this->resolve_orm_root_table_name($root);
 		if ($root_table_name === null || $root_table_name === "") {
 			$this->errors[] = "missing_orm_root_table";
-			return null;
+			return;
 		}
 
 		$root_table = $this->ensure_table($db, $root_table_name);
@@ -169,8 +183,6 @@ class structure_builder
 			$node = $root->nodes[$node_index];
 			$this->apply_orm_node_materialization($db, $root->path ?? "", $root_table_name, $node);
 		}
-
-		return $db;
 	}
 
 	public static function print_database(db_database $db): void
@@ -329,7 +341,7 @@ class structure_builder
 		$table->columns[$column_name] = $column;
 	}
 
-	private function ensure_scalar_column(db_table $table, string $property_name, string $type_name, bool $required): void
+	private function ensure_scalar_column(db_table $table, string $property_name, string $type_name, bool $required, ?string $sql_type = null): void
 	{
 		$column_name = $this->legacy_full_support ? $this->normalize_legacy_db_name($property_name) : $this->normalize_name($property_name);
 		if ($this->legacy_full_support && (strtolower($column_name) == "id" || strtolower($column_name) == "\$id")) {
@@ -342,7 +354,7 @@ class structure_builder
 		$column = new db_column();
 		$column->parent_table = $table;
 		$column->name = $column_name;
-		$column->type = $this->map_scalar_type($type_name);
+		$column->type = $this->map_scalar_type(($sql_type !== null && $sql_type !== "") ? $sql_type : $type_name);
 		$column->is_nullable = !$required;
 		$table->columns[$column_name] = $column;
 	}
@@ -425,12 +437,29 @@ class structure_builder
 
 	private function map_scalar_type(string $type_name): string
 	{
-		$type_key = strtolower($type_name);
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			return "varchar";
+		}
+		$paren_pos = strpos($type_key, "(");
+		$type_base = ($paren_pos === false) ? $type_key : substr($type_key, 0, $paren_pos);
+		if ($type_base === "enum" || $type_base === "set" || $type_base === "varchar" || $type_base === "char" || $type_base === "text" || $type_base === "datetime" || $type_base === "date" || $type_base === "time" || $type_base === "float" || $type_base === "double" || $type_base === "decimal" || $type_base === "numeric" || $type_base === "smallint" || $type_base === "bigint" || $type_base === "tinyint") {
+			return $type_base;
+		}
 		if (($type_key == "int") || ($type_key == "integer")) {
 			return "int";
 		}
 		if (($type_key == "bool") || ($type_key == "boolean")) {
-			return "bool";
+			return $this->legacy_full_support ? "tinyint" : "bool";
+		}
+		if (($type_key == "float") || ($type_key == "double")) {
+			return "float";
+		}
+		if ($type_key == "datetime") {
+			return "datetime";
+		}
+		if ($type_key == "date") {
+			return "date";
 		}
 		return "varchar";
 	}
@@ -515,11 +544,20 @@ class structure_builder
 				}
 				$uses_synthetic_helper = (
 					$this->legacy_full_support &&
-					$mode === "join_table" &&
 					$mat->link_table === null &&
 					$parent_table_name !== null &&
 					$node->parent !== null &&
-					!$node->parent->is_root
+					(
+						(
+							$mode === "join_table" &&
+							!$node->parent->is_root
+						) ||
+						(
+							$mode === "collection_table" &&
+							$mat->value_column !== null &&
+							$mat->value_column !== ""
+						)
+					)
 				);
 				$link_table_raw_name = ($mat->link_table !== null && $mat->link_table !== "")
 					? $mat->link_table
@@ -537,20 +575,20 @@ class structure_builder
 				$link_table = $this->ensure_table($db, $link_table_name);
 				$this->ensure_id_column($link_table);
 				if ($mat->owner_column !== null && $mat->owner_column !== "") {
-					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->owner_column), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->owner_column), true);
 				} else if ($mat->link_left !== null && $mat->link_left !== "") {
-					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->link_left), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->link_left), true);
 				} else if ($uses_synthetic_helper && $parent_table_name !== null) {
 					$this->ensure_named_ref_column($link_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
 				} else {
 					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $node->name), true);
 				}
 				if ($uses_synthetic_helper && $mat->id_column !== null && $mat->id_column !== "") {
-					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name("$" . $node->name), false);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name("$" . $node->name), false);
 				} else if ($mat->id_column !== null && $mat->id_column !== "") {
-					$this->ensure_named_ref_column($link_table, $this->normalize_legacy_column_name($mat->id_column), false);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->id_column), false);
 				} else if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($link_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+					$this->ensure_scalar_column($link_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
 				}
 				if ($mat->type_column !== null && $mat->type_column !== "") {
 					$this->ensure_type_column($link_table, $this->normalize_legacy_column_name($mat->type_column));
@@ -585,11 +623,11 @@ class structure_builder
 				$this->ensure_id_column($helper_table);
 				$this->ensure_named_ref_column($helper_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
 				if ($mode === "ref_column") {
-					$this->ensure_named_ref_column($helper_table, $this->normalize_legacy_column_name("$" . $node->name), false);
+					$this->ensure_named_ref_column($helper_table, $this->legacy_ref_role_column_name("$" . $node->name), false);
 				} else if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($helper_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+					$this->ensure_scalar_column($helper_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
 				} else {
-					$this->ensure_scalar_column($helper_table, $node->name, "string", false);
+					$this->ensure_scalar_column($helper_table, $node->name, "string", false, $mat->scalar_sql_type);
 				}
 				if ($mat->type_column !== null && $mat->type_column !== "") {
 					$this->ensure_type_column($helper_table, $this->normalize_legacy_column_name($mat->type_column));
@@ -605,7 +643,7 @@ class structure_builder
 
 			if ($mode === "one_to_many") {
 				if ($mat->owner_column !== null && $mat->owner_column !== "") {
-					$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->owner_column), false);
+					$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->owner_column), false);
 				} else {
 					$this->ensure_parent_ref_column($target_table, $root_table_name);
 				}
@@ -613,7 +651,7 @@ class structure_builder
 
 			if ($mode === "ref_column") {
 				if ($mat->id_column !== null && $mat->id_column !== "") {
-					$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->id_column), false);
+					$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->id_column), false);
 				} else {
 					$this->ensure_ref_column($target_table, $node->name);
 				}
@@ -625,18 +663,18 @@ class structure_builder
 
 			if ($mode === "value_column") {
 				if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+					$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
 				} else {
-					$this->ensure_scalar_column($target_table, $node->name, "string", false);
+					$this->ensure_scalar_column($target_table, $node->name, "string", false, $mat->scalar_sql_type);
 				}
 				continue;
 			}
 
 			if ($mat->id_column !== null && $mat->id_column !== "") {
-				$this->ensure_named_ref_column($target_table, $this->normalize_legacy_column_name($mat->id_column), false);
+				$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->id_column), false);
 			}
 			if ($mat->value_column !== null && $mat->value_column !== "") {
-				$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false);
+				$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
 			}
 			if ($mat->type_column !== null && $mat->type_column !== "") {
 				$this->ensure_type_column($target_table, $this->normalize_legacy_column_name($mat->type_column));
@@ -692,7 +730,12 @@ class structure_builder
 
 		$parent_table = $this->resolve_parent_primary_table_name($node);
 		$has_grandparent = ($node->parent !== null && $node->parent->parent !== null);
-		if ($parent_table !== null && $has_grandparent && $node->name !== null) {
+		if (
+			$parent_table !== null &&
+			$has_grandparent &&
+			$node->name !== null &&
+			!$this->uses_canonical_reused_type_table($node, $base)
+		) {
 			$normalized_node_name = $this->normalize_legacy_db_name($node->name);
 			if ($name === $normalized_node_name) {
 				return $this->legacy_child_table_name($parent_table, $normalized_node_name);
@@ -717,6 +760,24 @@ class structure_builder
 		return null;
 	}
 
+	private function uses_canonical_reused_type_table(\om3\base\orm\orm_node $node, string $raw_name): bool
+	{
+		for ($mat_index = 0; $mat_index < count($node->mat); $mat_index++) {
+			$mat = $node->mat[$mat_index];
+			if ($mat->table === null || $mat->table === "") {
+				continue;
+			}
+			if ($mat->table !== $raw_name) {
+				continue;
+			}
+			$mode = $mat->mode ?? "";
+			if ($mode === "one_to_many" || $mode === "type_table") {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private function legacy_owner_column_name(string $parent_table_name, string $property_name): string
 	{
 		$parent = $parent_table_name;
@@ -729,6 +790,18 @@ class structure_builder
 	private function legacy_collection_parent_ref_name(string $parent_table_name): string
 	{
 		return "$" . $parent_table_name;
+	}
+
+	private function legacy_ref_role_column_name(string $column_name): string
+	{
+		$normalized = $this->normalize_legacy_column_name($column_name);
+		if ($normalized === "") {
+			return $normalized;
+		}
+		if (substr($normalized, 0, 1) === "$") {
+			return $normalized;
+		}
+		return "$" . $normalized;
 	}
 
 	private function legacy_child_table_name(string $parent_table_name, string $child_name): string

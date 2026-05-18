@@ -1,0 +1,5 @@
+namespace om3\tools\top_level_const_repro;
+
+const MESSAGE = "ok";
+
+echo MESSAGE, "\n";

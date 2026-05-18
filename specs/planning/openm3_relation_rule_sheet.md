@@ -24,6 +24,13 @@ Reverse sides must reuse existing identities.
 - `relation identity`: where the relation itself lives, when it cannot live on the target type table
 - `path identity`: semantic traversal identity only; not storage identity by default
 
+Important distinction:
+
+- a collection property may require both:
+  - a target `type identity` for the collected model rows
+  - a separate `relation identity` for the collection link/helper table
+- these are different storage objects and must not be collapsed together
+
 ## Storage Roles
 
 - `owner`: allowed to create schema objects for that identity
@@ -111,6 +118,11 @@ Schema effect:
 
 - target rows live in their own type tables
 - relation rows live in one shared relation table
+
+Important note:
+
+- many-to-many does not replace the target type tables
+- it exists in addition to them
 
 Allowed creation:
 
@@ -414,6 +426,11 @@ Schema effect:
 
 - scalar values live in collection table with parent backreference
 
+Rule:
+
+- scalar collections always require a table
+- they do not have a reusable target type table
+
 Allowed creation:
 
 - collection table
@@ -464,6 +481,29 @@ When builder hits a relation node:
 5. If role is `inline`, create only parent columns
 6. If role is `owner`, create only missing schema objects for the resolved identities
 7. Never invent a path-owned table unless explicitly requested
+
+Collection-specific clarification:
+
+- do not treat `type table` and `relation/collection table` as globally exclusive alternatives
+- for some collection properties, both must exist
+
+Example:
+
+- `SeoImage[] Content_Images`
+  - `Seo_Images` is the type table for `SeoImage`
+  - `Properties_Rooms_Content_Images` may also be required as the collection table for `Property_Room.Content_Images`
+
+So for collection properties the builder should decide separately:
+
+1. does the collected target type need its own type table?
+2. does this collection property need its own collection/relation table?
+
+Typical answers:
+
+- scalar collections: collection table always yes, type table no
+- many-to-many model collections: type table yes, relation table yes
+- ordinary one-to-many model collections: type table yes, relation table no
+- legacy helper-table collection cases: type table yes, relation table yes
 
 ## What This Prevents
 

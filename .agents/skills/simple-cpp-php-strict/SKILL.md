@@ -7,45 +7,54 @@ description: Use when working on Open M3 `.phs` strict-mode code, especially whe
 
 Use this skill for Open M3 strict-mode `.phs` work.
 
-## Read Order
+## Source Of Truth
 
-1. Read [specs/simple_cpp_php_strict_quick_learn.md](/home/alexv/__AI/open_m3/open_m3_01/specs/simple_cpp_php_strict_quick_learn.md) first.
-2. Then read the upstream strict quick-learn at `/home/alexv/__AI/simple_cpp/stable/specs/simple_cpp_php_strict_quick_learn.md` when authoring rules matter.
+For language rules, do not rely on this file as the source of truth.
 
-## OM3 Rules
+Use the installed `scpp` tooling to discover the active upstream checkout:
 
-- Use the installed default `scpp` command.
-- Treat Open M3 as a strict-profile project.
-- Prefer the smallest correct source change.
-- Do not keep parallel local copies of the upstream quick-learn unless Open M3 needs short project-specific addenda.
+```bash
+scpp --doctor
+```
 
-## Current OM3 Build Rule
+Then read the upstream strict quick-learn from the reported `repo_root`, at:
 
-For the current Open M3 workspace state on `scpp 0.1.42`:
+- `<repo_root>/specs/simple_cpp_php_strict_quick_learn.md`
 
-- use `scpp build` as the normal first validation command
-- `base` can be checked with `scpp build`
-- tools that depend on `base`, including `tools/verify_model_loader`, also currently build successfully with `scpp build`
+## Open M3 Scope
+
+This local skill should stay thin and Open M3-specific.
+
+Use it for:
+
+- Open M3 build/validation workflow
+- Open M3 cleanup strategy
+- Open M3 retest expectations after shared strict-code changes
+
+Do not duplicate upstream strict-language semantics here unless Open M3 needs a very short temporary addendum.
+
+## Open M3 Workflow
+
+- use the installed default `scpp` command
+- treat Open M3 as a strict-profile project
+- prefer the smallest correct source change
+- after `scpp update`, if existing projects still point at stale runtime state, use `scpp build --build-runtime`
 - use `scpp build --build-dependencies` when you intentionally want a fuller dependency rebuild or when diagnosing dependency-state issues
+- if both runtime and dependency state may be stale, use `scpp build --build-runtime --build-dependencies`
 
-Historical note:
+## Open M3 Authoring Preferences
 
-- the earlier `scpp 0.1.36` workaround of preferring `scpp build --build-dependencies` for `base` and dependent tools should now be treated as historical, not current default guidance
-
-## Simplification Guidance
-
-When updating OM3 strict code after toolchain improvements:
-
-- remove compatibility casts only where the source is already strongly typed
+- simplify casts only where the source is already strongly typed
 - prefer direct foreach keys/values from typed `hash<...>` collections
-- prefer the foreach-provided typed value instead of re-indexing the hash again
+- prefer the foreach-provided typed value instead of re-indexing the same hash again
 - keep explicit normalization when crossing mixed JSON or legacy-data boundaries
-- re-test the touched project set after simplification
+- after shared `base` strict-code changes, re-test all affected Open M3 `prism.json` projects
 
-## Validation
+## Update Hygiene
 
-- For standalone tool projects: run `scpp build`
-- For `base`: run `scpp build`
-- For tools depending on `base`: start with `scpp build`
-- Use `scpp build --build-dependencies` when you want deeper dependency refresh/diagnosis
-- If a simplification affects shared `base` code, re-test all OM3 `prism.json` projects
+When Open M3 updates `scpp`:
+
+1. run `scpp --doctor`
+2. treat the reported `repo_root` as the active upstream source of truth
+3. refresh any local Open M3 notes that mention the current `scpp` version or behavior
+4. cache the new `scpp --doctor` snapshot in the relevant Open M3 planning note when the update matters for workflow or debugging

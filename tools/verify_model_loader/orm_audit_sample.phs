@@ -27,7 +27,7 @@ class orm_audit_sample
 
 		$audit = $assembler->audit_orm_root($root);
 		$db_builder = new \om3\base\db\structure_builder();
-		$db = $db_builder->build_from_orm_root($root);
+		$db = self::build_two_phase_legacy_schema($assembler, $db_builder, $dir, $root_class, $root);
 		echo "nodes=", count($root->nodes), "\n";
 		echo "multi_type=", count($audit->multi_type), "\n";
 		echo "multi_table=", count($audit->multi_table), "\n";
@@ -132,6 +132,50 @@ class orm_audit_sample
 				"Omi/App.Offers",
 			]);
 		}
+	}
+
+	private static function build_two_phase_legacy_schema(
+		\om3\base\assemble\model_assembler $assembler,
+		\om3\base\db\structure_builder $db_builder,
+		string $dir,
+		string $root_class,
+		\om3\base\orm\orm_root $app_root
+	): ?\om3\base\db\db_database
+	{
+		$db = $db_builder->begin_legacy_orm_database();
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		$root_key = self::normalize_legacy_type_name_local($root_class);
+
+		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
+			$type_name = $all_types->items[$type_index];
+			if ($root_key !== null && $type_name == $root_key) {
+				continue;
+			}
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name);
+			if ($type_root === null) {
+				continue;
+			}
+			$db_builder->append_orm_root_to_database($db, $type_root);
+		}
+
+		$db_builder->append_orm_root_to_database($db, $app_root);
+		return $db;
+	}
+
+	private static function normalize_legacy_type_name_local(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$trimmed = trim($type_name);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
 	}
 
 	private static function print_orm_nodes_tsv(\om3\base\orm\orm_root $root): void

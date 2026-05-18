@@ -1,0 +1,10 @@
+namespace om3\tools\nullable_string_ternary_repro;
+
+function maybe_name(bool $flag): ?string
+{
+	$value = $flag ? "ok" : null;
+	return $value;
+}
+
+echo "yes=", (maybe_name(true) ?? ""), "\n";
+echo "no=", (maybe_name(false) ?? ""), "\n";

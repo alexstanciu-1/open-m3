@@ -1,0 +1,22 @@
+$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+$root_class = "Omi\\User";
+
+$assembler = new \om3\base\assemble\model_assembler();
+$root = $assembler->build_legacy_orm_root($dir, $root_class);
+if ($root === null) {
+	echo "root_build_failed\n";
+	foreach ($assembler->errors as $error) {
+		echo $error, "\n";
+	}
+} else {
+	$builder = new \om3\base\db\structure_builder();
+	$db = $builder->build_from_orm_root($root);
+	if ($db === null) {
+		echo "schema_build_failed\n";
+		foreach ($builder->errors as $error) {
+			echo $error, "\n";
+		}
+	} else {
+		\om3\base\db\structure_builder::print_database($db);
+	}
+}

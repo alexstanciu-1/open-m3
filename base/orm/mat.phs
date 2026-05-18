@@ -13,4 +13,5 @@ class orm_mat
 	public ?string $link_table = null;
 	public ?string $link_left = null;
 	public ?string $link_right = null;
+	public ?string $scalar_sql_type = null;
 }

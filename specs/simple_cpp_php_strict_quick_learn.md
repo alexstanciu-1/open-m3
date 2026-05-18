@@ -2,60 +2,48 @@
 
 Status: active reference
 
-Purpose: keep a short Open M3-side strict-mode addendum that points to the upstream Simple C++ / PHP++ quick-learn without duplicating it.
+Purpose: keep a very short Open M3-side addendum that points to the active upstream Simple C++ strict quick-learn without maintaining a parallel copy of language rules.
 
-## Mandatory Read
+## Source Of Truth
 
-For PHP++ / PHS authoring decisions, this is a mandatory read:
+For PHP++ / PHS authoring rules, first discover the active installed Simple C++ checkout:
 
-- repo-local skill path: `.agents/skills/simple-cpp-php-strict/`
-- upstream repo path: `simple_cpp/specs/simple_cpp_php_strict_quick_learn.md`
-- local workflow rule: use the default installed `scpp` command rather than a repo-local Simple C++ checkout path
-- git repo: `https://github.com/alexstanciu-1/simplecpp`
+```bash
+scpp --doctor
+```
+
+Then read the upstream strict quick-learn from the reported `repo_root`:
+
+- `<repo_root>/specs/simple_cpp_php_strict_quick_learn.md`
+
+Do not hard-code the upstream checkout path in Open M3 notes.
 
 ## Open M3 Addendum
 
-Open M3 keeps only short project-specific strict-mode notes here.
+Open M3 keeps only short project-specific workflow notes here.
 
-Read order:
-
-1. this file for Open M3-local workflow notes
-2. `.agents/skills/simple-cpp-php-strict/`
-3. upstream strict quick-learn
-
-## Current Build Guidance
-
-For the current Open M3 workspace on `scpp 0.1.42`:
+### Build Guidance
 
 - use `scpp build` as the normal first validation command
-- `base` builds successfully with plain `scpp build`
-- dependent tools such as `tools/verify_model_loader` also build successfully with plain `scpp build`
-- `scpp build --build-dependencies` remains acceptable as a deeper dependency-refresh or diagnostic command, but it is no longer the default Open M3 workaround rule
+- after `scpp update`, if a project still points at stale runtime state, use `scpp build --build-runtime`
+- use `scpp build --build-dependencies` for deeper dependency-refresh or dependency-state diagnosis
+- use `scpp build --build-runtime --build-dependencies` when both layers may be stale
 
-This is a current verification rule, not a source-style rule.
-
-Historical note:
-
-- earlier `scpp 0.1.36` workspace guidance required `scpp build --build-dependencies` for `base` and dependent tools because of entrypoint/dependency artifact failures
-- those failures no longer reproduce in the current `scpp 0.1.42` workspace state
-
-## Current Simplification Guidance
-
-The newer strict updates have relaxed some earlier explicit-cast needs.
-
-For Open M3 cleanup passes:
+### Cleanup Guidance
 
 - simplify casts first at typed `hash<...>` foreach boundaries
-- keep explicit casts where Open M3 is normalizing mixed JSON or legacy imported data
-- re-test all affected `prism.json` projects after simplification
+- keep explicit normalization at mixed JSON or legacy metadata boundaries unless a local repro proves otherwise
+- after shared strict-code changes, re-test the affected Open M3 `prism.json` projects
 
-Current note:
+### Update Hygiene
 
-- the `typed hash<> foreach` lowering fixes documented upstream around `scpp 0.1.41` reduce the need for some earlier defensive foreach-side stabilizations
-- Open M3 should still keep explicit normalization at mixed JSON and legacy metadata boundaries unless a local repro proves the cast is no longer needed
+After `scpp update`:
+
+1. run `scpp --doctor`
+2. use the reported `repo_root` as the upstream documentation source of truth
+3. refresh any Open M3 notes that mention the current `scpp` version or changed strict behavior
+4. cache the current `scpp --doctor` snapshot in a planning/workflow note when the update affects debugging or local process
 
 ## Rule
 
-Do not maintain a parallel Open M3-local copy of the full quick-learn content unless Open M3 intentionally needs project-specific addenda.
-
-When Open M3 work depends on PHP++ / PHS authoring rules, read the upstream document first.
+Do not maintain a parallel Open M3-local copy of the upstream strict quick-learn unless Open M3 intentionally needs a short temporary addendum.

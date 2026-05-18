@@ -435,10 +435,38 @@ class model_assembler
 	public function build_legacy_orm_root(string $dir, string $root_class): ?\om3\base\orm\orm_root
 	{
 		$type_map_box = $this->load_legacy_type_map($dir);
+		return $this->build_legacy_orm_root_from_map($type_map_box, $root_class, $dir);
+	}
+
+	public function list_legacy_instantiable_root_types(string $dir): string_list_box
+	{
+		$type_map_box = $this->load_legacy_type_map($dir);
+		$out = new string_list_box();
+		foreach ($type_map_box->items as $type_key => $type_data) {
+			if ($type_data === null) {
+				continue;
+			}
+			if ($this->legacy_type_is_abstract($type_data)) {
+				continue;
+			}
+			if (!isset($type_data["storage"]) || !isset($type_data["storage"]["table"])) {
+				continue;
+			}
+			$out->items[] = (string) $type_key;
+		}
+		return $this->unique_strings($out);
+	}
+
+	public function build_legacy_orm_root_from_map(
+		mixed_hash_box $type_map_box,
+		string $root_class,
+		?string $source_dir = null
+	): ?\om3\base\orm\orm_root
+	{
 		$type_map = $type_map_box->items;
 		$root_type_key = $this->normalize_legacy_type_name($root_class);
 		if ($root_type_key === null || $root_type_key === "" || !isset($type_map[$root_type_key])) {
-			$this->errors[] = "legacy_missing_root:" . $dir . ":" . $root_class;
+			$this->errors[] = "legacy_missing_root:" . ($source_dir ?? "") . ":" . $root_class;
 			return null;
 		}
 
@@ -481,7 +509,7 @@ class model_assembler
 						continue;
 					}
 					$property_path = $entry_path . "." . $this->normalize_legacy_property_name($property_key);
-						$type_names_box = $this->collect_legacy_property_types($property_data);
+						$type_names_box = $this->collect_legacy_property_types($property_data, $type_map_box);
 						$type_names = $type_names_box->items;
 						if (count($type_names) <= 0) {
 						continue;
@@ -1195,6 +1223,26 @@ class model_assembler
 		);
 		$legacy_column = $this->legacy_storage_string($property_storage, "column");
 		$one_to_many_owner_column = $this->legacy_storage_string($property_storage, "oneToMany");
+		$inferred_collection_table = $this->infer_legacy_collection_table_name($tables, $property_name);
+		$inferred_collection_owner_column = $this->infer_legacy_collection_owner_column($tables);
+		$inferred_collection_target_column = $this->infer_legacy_collection_target_column($legacy_column, $property_name);
+		$first_type_name ?string = null;
+		if (count($type_names->items) > 0) {
+			$first_type_name = $type_names->items[0];
+		}
+		$needs_legacy_helper_collection = (
+			$is_list &&
+			!$has_collection_storage &&
+			!$has_many_to_many &&
+			!$has_one_to_many &&
+			(
+				(!$targets_models) ||
+				!$root_default_one_to_many
+			) &&
+			$inferred_collection_table !== null &&
+			$inferred_collection_owner_column !== null &&
+			$inferred_collection_target_column !== null
+		);
 		$route_map hash<om3\base\orm\orm_mat> = [];
 		for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
 			$type_name = $type_names->items[$type_index];
@@ -1212,7 +1260,7 @@ class model_assembler
 			$route_key = $table_name . "|" . ($probe->mode ?? "");
 			if (!isset($route_map[$route_key])) {
 				$item = new \om3\base\orm\orm_mat();
-				if ($is_list && ($has_many_to_many || $has_collection_storage)) {
+				if ($is_list && ($has_many_to_many || $has_collection_storage || $needs_legacy_helper_collection)) {
 					if ($has_many_to_many) {
 						$item->mode = "join_table";
 					} else {
@@ -1220,14 +1268,22 @@ class model_assembler
 					}
 					if ($collection_table !== null && $collection_table !== "") {
 						$item->link_table = $collection_table;
+					} else if ($needs_legacy_helper_collection && $inferred_collection_table !== null) {
+						$item->link_table = $inferred_collection_table;
 					} else {
 						$item->link_table = $table_name;
 					}
-					$item->owner_column = $collection_owner_column;
-					$item->link_left = $collection_owner_column;
+					if ($collection_owner_column !== null && $collection_owner_column !== "") {
+						$item->owner_column = $collection_owner_column;
+					} else {
+						$item->owner_column = $inferred_collection_owner_column;
+					}
+					$item->link_left = $item->owner_column;
 					if ($targets_models) {
 						if ($collection_target_column !== null && $collection_target_column !== "") {
 							$item->id_column = $collection_target_column;
+						} else if ($needs_legacy_helper_collection && $inferred_collection_target_column !== null) {
+							$item->id_column = $inferred_collection_target_column;
 						} else {
 							$item->id_column = "\$id";
 						}
@@ -1238,6 +1294,7 @@ class model_assembler
 						} else {
 							$item->value_column = $property_name;
 						}
+						$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $type_name);
 						$item->link_right = $item->value_column;
 					}
 				} else if ($is_list && ($has_one_to_many || $root_default_one_to_many)) {
@@ -1258,6 +1315,7 @@ class model_assembler
 						} else {
 							$item->value_column = $property_name;
 						}
+						$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $type_name);
 					}
 				} else {
 					$item->mode = $probe->mode;
@@ -1286,6 +1344,7 @@ class model_assembler
 						} else {
 							$item->value_column = $property_name;
 						}
+						$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $type_name);
 					}
 				}
 				$route_map[$route_key] = $item;
@@ -1295,18 +1354,28 @@ class model_assembler
 
 		if (count($route_map) <= 0) {
 			$item = new \om3\base\orm\orm_mat();
-			if ($is_list && ($has_many_to_many || $has_collection_storage)) {
+			if ($is_list && ($has_many_to_many || $has_collection_storage || $needs_legacy_helper_collection)) {
 				if ($has_many_to_many) {
 					$item->mode = "join_table";
 				} else {
 					$item->mode = "collection_table";
 				}
-				$item->link_table = $collection_table;
-				$item->owner_column = $collection_owner_column;
-				$item->link_left = $collection_owner_column;
+				if ($collection_table !== null && $collection_table !== "") {
+					$item->link_table = $collection_table;
+				} else {
+					$item->link_table = $inferred_collection_table;
+				}
+				if ($collection_owner_column !== null && $collection_owner_column !== "") {
+					$item->owner_column = $collection_owner_column;
+				} else {
+					$item->owner_column = $inferred_collection_owner_column;
+				}
+				$item->link_left = $item->owner_column;
 				if ($targets_models) {
 					if ($collection_target_column !== null && $collection_target_column !== "") {
 						$item->id_column = $collection_target_column;
+					} else if ($needs_legacy_helper_collection && $inferred_collection_target_column !== null) {
+						$item->id_column = $inferred_collection_target_column;
 					} else {
 						$item->id_column = "\$id";
 					}
@@ -1317,6 +1386,7 @@ class model_assembler
 					} else {
 						$item->value_column = $property_name;
 					}
+					$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $first_type_name);
 					$item->link_right = $item->value_column;
 				}
 			} else if ($is_list && ($has_one_to_many || $root_default_one_to_many)) {
@@ -1339,6 +1409,7 @@ class model_assembler
 					} else {
 						$item->value_column = $property_name;
 					}
+					$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $first_type_name);
 				}
 			} else {
 				$item->mode = $probe->mode;
@@ -1357,6 +1428,7 @@ class model_assembler
 					} else {
 						$item->value_column = $property_name;
 					}
+					$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $first_type_name);
 				}
 			}
 			for ($type_index = 0; $type_index < count($type_names->items); $type_index++) {
@@ -1406,6 +1478,50 @@ class model_assembler
 			return null;
 		}
 		return $value;
+	}
+
+	private function legacy_property_sql_type(mixed $property_storage, ?string $type_name): ?string
+	{
+		$storage_type = $this->legacy_storage_string($property_storage, "type");
+		if ($storage_type !== null && $storage_type !== "") {
+			return $storage_type;
+		}
+		if ($type_name === null || $type_name === "") {
+			return null;
+		}
+		return $type_name;
+	}
+
+	private function infer_legacy_collection_table_name(string_list_box $tables, string $property_name): ?string
+	{
+		if (count($tables->items) <= 0) {
+			return null;
+		}
+		$parent_table = $tables->items[0];
+		if ($parent_table === "") {
+			return null;
+		}
+		return $parent_table . "_" . $property_name;
+	}
+
+	private function infer_legacy_collection_owner_column(string_list_box $tables): ?string
+	{
+		if (count($tables->items) <= 0) {
+			return null;
+		}
+		$parent_table = $tables->items[0];
+		if ($parent_table === "") {
+			return null;
+		}
+		return $parent_table;
+	}
+
+	private function infer_legacy_collection_target_column(?string $legacy_column, string $property_name): ?string
+	{
+		if ($legacy_column !== null && $legacy_column !== "") {
+			return $legacy_column;
+		}
+		return $property_name;
 	}
 
 	private function csv_to_unique_strings(?string $csv): string_list_box
@@ -1531,10 +1647,6 @@ class model_assembler
 			if (!str_ends_with($entry, ".json")) {
 				continue;
 			}
-			if (str_ends_with($entry, "_.json")) {
-				continue;
-			}
-
 			$path = $dir . "/" . $entry;
 			$data = \om3\base\load\json_loader::load_json_file($path);
 			if ($data === null || !isset($data["class"])) {
@@ -1569,7 +1681,7 @@ class model_assembler
 			}
 			$property = new \om3\base\schema\model_property();
 			$property->name = $this->normalize_legacy_property_name((string) $property_name);
-			$type_names = $this->collect_legacy_property_types($property_data);
+			$type_names = $this->collect_legacy_property_types($property_data, $type_map);
 			$property->type_list = $this->legacy_property_is_list($property_data);
 			$property->type_name = $this->resolve_common_legacy_type($type_names, $type_map);
 
@@ -1628,7 +1740,7 @@ class model_assembler
 		return ($text === "1" || $text === "true" || $text === "yes" || $text === "on");
 	}
 
-	private function collect_legacy_property_types(mixed $property_data): string_list_box
+	private function collect_legacy_property_types(mixed $property_data, mixed_hash_box $type_map): string_list_box
 	{
 		$out = new string_list_box();
 		if (!isset($property_data["types"])) {
@@ -1644,7 +1756,7 @@ class model_assembler
 					$normalized = $this->normalize_legacy_type_name((string) $option_name);
 				}
 				if ($normalized !== null && $normalized !== "") {
-					$out->items[] = $normalized;
+					$this->append_legacy_instantiable_types($out, $normalized, $type_map);
 				}
 			}
 			return $this->unique_strings($out);
@@ -1654,7 +1766,7 @@ class model_assembler
 			foreach ($types_data as $type_name) {
 				$normalized = $this->normalize_legacy_type_name((string) $type_name);
 				if ($normalized !== null && $normalized !== "") {
-					$out->items[] = $normalized;
+					$this->append_legacy_instantiable_types($out, $normalized, $type_map);
 				}
 			}
 			return $this->unique_strings($out);
@@ -1662,9 +1774,89 @@ class model_assembler
 
 		$normalized = $this->normalize_legacy_type_name((string) $types_data);
 		if ($normalized !== null && $normalized !== "") {
-			$out->items[] = $normalized;
+			$this->append_legacy_instantiable_types($out, $normalized, $type_map);
 		}
-		return $out;
+		return $this->unique_strings($out);
+	}
+
+	private function append_legacy_instantiable_types(
+		string_list_box $out,
+		string $type_name,
+		mixed_hash_box $type_map
+	): void
+	{
+		if ($this->is_legacy_scalar_type($type_name)) {
+			$out->items[] = $type_name;
+			return;
+		}
+
+		$expanded = $this->collect_legacy_instantiable_types_for($type_name, $type_map);
+		if (count($expanded->items) <= 0) {
+			$out->items[] = $type_name;
+			return;
+		}
+
+		for ($i = 0; $i < count($expanded->items); $i++) {
+			$out->items[] = $expanded->items[$i];
+		}
+	}
+
+	private function collect_legacy_instantiable_types_for(string $type_name, mixed_hash_box $type_map): string_list_box
+	{
+		$out = new string_list_box();
+		$normalized = $this->normalize_legacy_type_name($type_name);
+		if ($normalized === null || $normalized === "") {
+			return $out;
+		}
+
+		$seen hash<bool> = [];
+		$queue vector<string> = [];
+		$queue[] = $normalized;
+
+		for ($queue_index = 0; $queue_index < count($queue); $queue_index++) {
+			$current = $queue[$queue_index];
+			if (isset($seen[$current])) {
+				continue;
+			}
+			$seen[$current] = true;
+
+			if (!isset($type_map->items[$current])) {
+				$out->items[] = $current;
+				continue;
+			}
+
+			$current_data = $type_map->items[$current];
+			if (!$this->legacy_type_is_abstract($current_data)) {
+				$out->items[] = $current;
+			}
+
+			foreach ($type_map->items as $candidate_name => $candidate_data) {
+				if ($candidate_data === null || !isset($candidate_data["parent"])) {
+					continue;
+				}
+				$candidate_parent = $this->normalize_legacy_type_name((string) $candidate_data["parent"]);
+				if ($candidate_parent === $current) {
+					$queue[] = (string) $candidate_name;
+				}
+			}
+		}
+
+		return $this->unique_strings($out);
+	}
+
+	private function legacy_type_is_abstract(mixed $type_data): bool
+	{
+		if ($type_data === null || !isset($type_data["is_abstract"])) {
+			return false;
+		}
+
+		$value = $type_data["is_abstract"];
+		if ($value === true || $value === false) {
+			return $value;
+		}
+
+		$text = strtolower(trim((string) $value));
+		return ($text === "1" || $text === "true" || $text === "yes" || $text === "on");
 	}
 
 	private function legacy_property_is_list(mixed $property_data): bool
