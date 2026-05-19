@@ -60,3 +60,12 @@ Practical implication:
 ## Current Working Success Condition
 
 Open M3 can define a model, materialize it through the ORM, and correctly read and write against a legacy project database while co-existing with the legacy application.
+
+## Current ORM Reading Order
+
+For the current ORM direction and implementation notes, read in this order:
+
+1. [ORM overview note](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_overview_note.md:1)
+2. [ORM materialization direction](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_materialization_direction.md:1)
+3. [Storage overview](/home/alexv/__AI/open_m3/open_m3_01/specs/storage/overview.md:1)
+4. [Relation rule sheet](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/openm3_relation_rule_sheet.md:1)

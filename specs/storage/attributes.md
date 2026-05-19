@@ -71,6 +71,27 @@ Storage must not cross levels or redefine structural ownership.
 | none materialization | A non-persisted property should be expressed as `kind: none`, not a separate skip flag. |
 | indexing | Uniqueness should be expressed through `index: unique`, not a separate unique attribute. |
 
+## Current ORM Rule Clarifications
+
+These clarify how the current ORM interprets the storage layer when building DB structure.
+
+| Area | Rule |
+| --- | --- |
+| scalar properties | Scalar properties materialize as `value_column` on an owner table. |
+| singular refs | Singular model references materialize as `ref_column` on an owner table by default. |
+| target type reuse | A singular ref does not replace the target type table; it only decides where the reference column lives. |
+| one-to-many | `one_to_many` means the relation lives on the child/target table via an owner/backreference column. |
+| no synthetic collection for one-to-many | A one-to-many collection must not create a helper table just because the property is a collection. |
+| helper collections | A `collection_table` means the collection itself owns a helper/relation table. |
+| model collections | A model collection may require both a target type table and a separate helper/relation table. |
+| many-to-many | `join_table` means one canonical shared relation table, in addition to the target type tables. |
+| reverse identity reuse | Reverse relation paths must reuse the existing relation identity instead of creating mirrored parallel schema. |
+| path identity | Path identity is not storage identity by default. |
+| type identity | Type identity decides where model rows live. |
+| relation identity | Relation identity decides where relation/helper rows live when they do not live on the type table. |
+| polymorphic property refs | If a property targets an abstract model or multiple concrete target types, the ORM may need a property-level `$_type` column. |
+| shared polymorphic tables | If multiple concrete classes share one storage table, that table may need a table-entry `$_type` column. |
+
 ## Notes
 
 | Topic | Note |

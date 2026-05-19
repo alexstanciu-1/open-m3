@@ -46,6 +46,12 @@ This fits the current roadmap because the ORM is the first major Open M3 runtime
 | build shape | The ORM should compile as a shared library such as `.so` or `.dll`. |
 | reason | This keeps the ORM reusable, modular, and separate from app/tool code. |
 
+Current reading pointers for ORM behavior/design:
+
+- [ORM overview note](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_overview_note.md:1)
+- [ORM materialization direction](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_materialization_direction.md:1)
+- [Storage overview](/home/alexv/__AI/open_m3/open_m3_01/specs/storage/overview.md:1)
+
 ## Suggested ORM Internal Structure
 
 This is still provisional, but the ORM module will likely need internal areas such as:

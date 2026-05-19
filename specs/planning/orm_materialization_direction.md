@@ -1,320 +1,458 @@
 # Open M3 ORM Materialization Direction
 
-Status: planning draft
+Status: current implementation note
 
-Purpose: capture the current direction for turning assembled model information into database structure, with an emphasis on keeping the traversal simple and allowing the same reusable model to materialize differently at different root-relative paths.
+Purpose: describe how the new ORM currently turns model metadata into in-memory DB structure, using the verified OpenM3 flow rather than the older legacy internals.
+
+This note is about:
+
+- model to ORM planning
+- ORM planning to DB structure
+- identity and ownership rules
+
+This note is not about:
+
+- SQL sync/apply
+- query planning
+- CRUD merge/hydration
 
 ## Why This Note Exists
 
-The legacy H2B ORM still contains useful ideas, but it mixes several concerns:
+The legacy H2B ORM is still useful for extracting rules, but it mixes too many concerns in one place:
 
-- model traversal
-- storage/materialization decisions
-- SQL schema object creation
-- database synchronization
+- type/property interpretation
+- inheritance expansion
+- storage naming
+- table/column creation
+- DB sync
 
-That makes the flow harder to reason about today.
+The new ORM direction is to keep those concerns separated:
 
-The current Open M3 direction is to simplify this by keeping traversal as the backbone and moving storage decisions into a thinner planning layer.
+1. load raw metadata
+2. assemble effective ORM nodes and materialization routes
+3. build internal DB structure from those routes
+4. only later compare/apply to a database
 
-The aim is not to reduce traversal.
+The aim is not to mimic the legacy code layout.
 
-The aim is to make traversal simpler, more explicit, and easier to reuse.
+The aim is to keep the new flow explicit, path-aware, and easier to reason about.
 
-## Main Assessment
+## The Current Two-Layer Flow
 
-The new ORM should be able to rely primarily on:
+The verified current flow is:
 
-- loaded raw models
-- assembled path-specific models
-- iterative traversal from the root model
+1. `json_loader`
+   - loads raw metadata into typed OpenM3 structures
 
-This should be enough to discover what must be materialized.
+2. `model_assembler`
+   - builds an `orm_root`
+   - expands visible types
+   - decides one or more `orm_mat` routes per visible node
 
-What still needs an ORM-specific layer is not traversal itself, but the interpretation of each path:
+3. `structure_builder`
+   - reads the `orm_root`
+   - resolves final table/column identities
+   - creates in-memory `db_database`, `db_table`, `db_column`, `db_index`
 
-- does this path materialize in the parent table
-- does it materialize in its own table
-- does it materialize in a path-specific table
-- does it become a reference column
-- does it become a collection table
-- is it ignored for storage
+So the practical contract is:
 
-So the simplification opportunity is:
+- `model_assembler` answers: what storage route does this visible path use
+- `structure_builder` answers: what actual schema objects does that route create or reuse
 
-- keep one generic traversal
-- attach a smaller storage-materialization planner to the traversal output
+## The Main Runtime Structures
 
-## Important Requirement: Same Model, Multiple Materializations
+The current materialization path is centered on:
 
-The new ORM must support the same reusable model being materialized differently depending on path.
+- [base/orm/root.phs](/home/alexv/__AI/open_m3/open_m3_01/base/orm/root.phs:1)
+- [base/orm/node.phs](/home/alexv/__AI/open_m3/open_m3_01/base/orm/node.phs:1)
+- [base/orm/mat.phs](/home/alexv/__AI/open_m3/open_m3_01/base/orm/mat.phs:1)
 
-Example direction:
+Important fields:
 
-- `app.properties.address` -> `properties_addresses`
-- `app.companies.address` -> `companies_addresses`
+- `orm_root`
+  - root path/type
+  - full discovered node list
+  - optional root entry type column
 
-The exact final table names may differ, but the requirement is clear:
+- `orm_node`
+  - visible path
+  - `branch_kind`
+  - `type_models`
+  - one or more `mat[]` entries
 
-- base `address` stays one reusable semantic model
-- assembled `app.properties.address` is one effective usage
-- assembled `app.companies.address` is another effective usage
-- those two usages may materialize into different tables
+- `orm_mat`
+  - materialization mode
+  - target table or link table
+  - owner/ref/value/type column identities
+  - target type list
 
-This means storage materialization identity cannot depend only on base type.
+That means the current materialization unit is:
 
-It must be able to depend on:
+- one visible node
+- with zero or more concrete materialization routes
 
-- full root-relative path
-- effective assembled node
-- explicit storage overrides, when present
+## High-Level Rule
 
-Path-based tables should not be invented by default.
+A visible path does not create schema by itself.
 
-The current direction is:
+It must first resolve to:
 
-- explicit inline materialization may flatten a `struct.sub` into the parent table
-- explicit custom table materialization may place a `struct.sub` into a path-specific table
-- otherwise a `struct.sub` should use its sub-type default table identity
+- a storage identity
+- a storage mode
+- an ownership role
 
-Example direction:
+Only then can the schema builder create or reuse DB objects.
 
-- base `address` default table -> `addresses`
-- `app.properties.address` -> `addresses` unless explicitly overridden
-- `app.properties.address` -> `properties_addresses` only when explicitly requested
-- `app.properties.address` -> inline only when explicitly requested
+This is why the current implementation distinguishes:
 
-## Proposed Simplified Flow
+- type table identity
+- relation/helper table identity
+- path identity
 
-### 1. Traverse
+Path identity alone is not storage identity by default.
 
-Start from the root model and walk the assembled model graph iteratively.
+## Root Strategy
 
-At each visited node/property, the traversal should know:
+The current schema verification flow uses two phases:
 
-- current full path
-- current effective model
-- current property
-- parent path
-- whether the property is scalar / `struct.sub` / `struct.ref` / `struct.weakref` / collection
-- whether the current usage has local customization
+1. all instantiable stored types first
+   - shallow traversal only
+   - direct properties only
+   - used to ensure standalone type tables and direct property-driven helper structures are discovered
 
-Traversal should stay generic and reusable.
+2. `Omi\App` second
+   - full business graph traversal
+   - uses the same table/relation registries
+   - fills in the app-root-owned paths, relations, and helper structures
 
-It should not directly create SQL.
+This was chosen because legacy schema coverage is not fully reachable from `App` alone.
 
-### 2. Classify Materialization
+Important implementation direction:
 
-For each visited property, the ORM planner should decide one storage role.
+- type roots should contribute type tables
+- property semantics should contribute helper/relation tables
+
+Not:
+
+- every reachable path invents its own table
+
+## Traversal Inputs
+
+The materialization planner currently uses these inputs:
+
+- current path
+- current effective property data
+- parent type data
+- expanded target type list
+- legacy/OpenM3 storage metadata
+- root-vs-non-root context
+- list-vs-singular shape
+- model-target-vs-scalar-target shape
+
+This happens mainly in:
+
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:744)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:843)
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:1254)
+
+## Materialization Modes
+
+The current important `orm_mat.mode` values are:
+
+- `value_column`
+- `ref_column`
+- `type_table`
+- `one_to_many`
+- `collection_table`
+- `join_table`
+
+These should be read as follows.
+
+### `value_column`
+
+Meaning:
+
+- scalar data stored on an existing owner table
+
+Schema effect:
+
+- create or reuse a scalar column on the target table
 
 Examples:
 
-- scalar column in parent table
-- reference column in parent table
-- embedded sub-structure in parent table
-- owned sub-structure in dedicated table
-- collection table
-- join table
-- ignored / non-stored
+- plain scalar properties
+- scalar helper-table values when the relation/helper table already exists
 
-For `struct.sub`, the planner should also decide one materialization mode:
+### `ref_column`
 
-- inline in parent table
-- dedicated explicit table
-- default table of the sub-type
+Meaning:
 
-This is the main ORM-specific decision point.
+- singular reference stored on an existing owner table
 
-### 3. Build Schema Objects
+Schema effect:
 
-Once a path is classified, the ORM should build internal schema objects such as:
+- create or reuse an integer ref column
+- optionally add a companion `$_type` column for polymorphic refs
 
-- table definitions
-- column definitions
-- indexes
-- foreign keys
+Important rule:
 
-These should be built from the traversal + classification result, not by re-traversing the model in a second ad hoc way.
+- the target model may still have its own type table
+- `ref_column` is about where the reference lives, not where the target rows live
 
-### 4. Sync To Database
+### `type_table`
 
-Only after the in-memory schema definition exists should the DB sync layer compare and apply changes.
+Meaning:
 
-## Why Path-Based Assembly Helps
+- use the target model’s own type table
 
-The new assembled model cache already gives us a better foundation than the legacy ORM had.
+Schema effect:
 
-Instead of inventing a large secondary traversal graph just for SQL setup, we can use:
+- ensure that target type table exists
+- attach columns there as required by the route
 
-- raw model cache by type
-- assembled model cache by path
+This is usually used for:
 
-This is especially helpful for `struct.sub`, because:
+- reusable concrete type storage
+- not for synthetic helper/relation tables
 
-- `address` is reusable
-- `company.address` may refine it
-- `app.companies.address` may refine it again
-- the final storage decision may also differ at each path
+### `one_to_many`
 
-So the same semantic base model can produce multiple effective storage targets cleanly.
+Meaning:
 
-## What Traversal Must Be Able To Emit
+- the relation lives on the child/target table through an owner/backreference column
 
-The traversal should eventually provide enough context for a planner record such as:
+Schema effect:
 
-- path
-- assembled model key
-- base model key
-- parent table candidate
-- materialization kind
-- target table identity
-- target column identity
-- ownership mode
-- reference target, if any
-- collection details, if any
+- reuse/create the child type table
+- add the owner/backreference column there
+- no helper table
 
-The exact runtime data structures are still open, but this is the shape of information the planner needs.
+Important current rule:
 
-## Materialization Must Be Two-Way
+- the implicit default `one_to_many` behavior is only allowed for real `App` root model collections
+- non-App shallow type roots must not overuse this default
 
-One important conclusion from the recent legacy audit is that `orm_materialization` is not only a forward storage-planning note.
+That rule is important for avoiding collapse of legitimate helper tables.
 
-It needs to support two directions:
+### `collection_table`
 
-1. type/property -> table/column
-- used to build schema
-- used to plan queries
-- used to generate joins and SQL column selections
+Meaning:
 
-2. table/column -> type/property
-- used to hydrate queried DB data back into the visible model path
-- used to understand which branch/type a row fragment belongs to
-- likely useful later for CRUD merge and sync logic too
+- the relation/value collection needs its own helper table
 
-This means `orm_materialization` is really a bidirectional correspondence layer between:
+Schema effect:
 
-- visible ORM path/type/property semantics
-- relational table/column shape
+- create/reuse a dedicated helper table
+- add owner column
+- add either:
+  - ref column for collected model targets
+  - scalar value column for scalar collections
+- optionally add type column
 
-This should be documented early because it strongly affects structure design.
+Important distinction:
 
-If we only model the forward direction, schema setup may work but query result reconstruction will stay ad hoc.
+- this does not replace the target type table
+- it exists in addition to it when collected items are models
 
+Examples:
 
-## One Visible Step May Need More Than One Materialization Branch
+- scalar collections
+- legacy helper-table model collections
+- explicit collection storage
 
-The legacy audit also suggests that one visible node/property step may not always be representable by exactly one flat materialization object.
+### `join_table`
 
-This is most relevant in cases such as:
+Meaning:
 
-- non-strict inheritance expansion
-- explicit mixed visible types
-- collection/join-table branches
+- canonical many-to-many relation table
 
-The important distinction is:
+Schema effect:
 
-- ordinary parent/join/target structure is not the interesting problem
-- inheritance-expanded visible properties are the higher-value case
+- create/reuse one shared relation table
+- add left/right relation columns
+- optionally add type column
 
-Example from legacy Travelfuse:
+Important rule:
 
-- `App.MerchItems`
-  - visible declared type: `Omi\\Comm\\Merch\\Merch[]`
-  - non-strict
-  - legacy ORM may expand descendants and therefore consider multiple concrete target materializations for the same semantic purpose
+- many-to-many creates a relation table in addition to the target type tables
+- reverse sides must reuse the same relation identity
 
-Counter-example:
+## How The Planner Decides
 
-- `App.Offers`
-  - visible declared type: `Omi\\Comm\\Offer\\Offer[]`
-  - strict in exported metadata
-  - legacy ORM stays on the visible declared type
+In practical terms, the planner currently decides using this order of ideas:
 
-So the likely direction is:
+1. Is the property stored at all?
+2. Is it scalar, singular ref, singular sub, list of scalars, or list of models?
+3. Is there explicit collection/relation metadata?
+4. Is there explicit `manyToMany`?
+5. Is there explicit `oneToMany`?
+6. Is this one of the legacy helper-table collection cases?
+7. Is this an App-root default collection that should behave as `one_to_many`?
+8. Does the route need a polymorphic type column?
 
-- one visible `orm_node`
-- with one or more materialization branches
-- each branch carrying both:
-  - forward mapping
-  - reverse mapping
+This is all encoded in the legacy-import/materialization path in:
 
-This does not force the final class layout yet, but it is the correct conceptual model for the next design step.
+- [base/model_assembler.phs](/home/alexv/__AI/open_m3/open_m3_01/base/model_assembler.phs:1254)
 
+## Polymorphic Type Columns
 
-## Better Audit Lens
+The current verified rules are:
 
-The recent audit also showed that:
+### Property-level `$_type`
 
-- `multi_table`
-- `multi_column`
-- `collection_table`
+Add a property type column when:
 
-are often secondary symptoms, not primary categories.
+- the property targets models
+- and either:
+  - the route has multiple concrete target types
+  - or the declared target type is abstract
 
-The more useful primary question is:
+Example:
 
-- why did this visible property/path branch at all?
+- `Orders_Items.$Config$_type`
 
-The main branch causes observed so far are:
+This is a property-level rule.
 
-1. ordinary relation structure
-- parent table + target table
-- sometimes join/collection table too
+### Table-entry `$_type`
 
-2. inheritance expansion
-- one visible base type
-- several concrete descendants
+Add a root/table-level `$_type` column when:
 
-3. explicit mixed visible types
-- one property declares multiple visible model targets
+- multiple concrete classes share the same storage table
 
-4. collection-table semantics
-- one property crosses a collection/join table
+Examples:
 
-This is useful because it suggests `orm_materialization` should be organized around branches and their cause, rather than only around final table/column counts.
+- `$Users.$_type`
+- `Reverse_APIs.$_type`
 
-## Suggested Direction For v1
+This is a table-entry rule, not the same as property-level polymorphism.
 
-Start with the simpler cases first:
+## Owner-Column Rules
 
-- scalar properties
-- `struct.ref` as reference column
-- `struct.sub` as path-sensitive owned structure
-- collections only after the singular path is solid
+The schema builder must not derive owner columns only from target type names.
 
-This would let us prove the design on a meaningful case such as `address`.
+The current verified rules are:
 
-## First Concrete Materialization Case
+1. App-owned synthetic owner columns use the actual `App` property name
+   - example:
+     - `Favorite_Order_Email.$$App$Favorite_Order_Emails`
+   - not:
+     - `Favorite_Order_Email.$$App$Favorite_Order_Email`
 
-The first concrete case to implement should be:
+2. Nested `one_to_many` branches use the immediate parent primary table when that is the real owner source
 
-- one reusable base model: `address`
-- at least two usage paths:
-  - `app.properties.address`
-  - `app.companies.address`
-- both paths assemble correctly
-- both paths can materialize independently
+3. Boolean `oneToMany = true` is a relation flag, not a literal owner-column name
+   - this avoids invalid outputs like:
+     - `Rate_Plans.$1`
 
-This will prove:
+4. Singular model refs with `oneToMany` metadata may still be owner-table ref columns
+   - example:
+     - `$Users.$Mail_Sender`
+     - `Companies.$Mail_Sender`
 
-- path-sensitive assembly
-- path-sensitive storage identity
-- simpler traversal-driven planning
+So the final owner/ref column shape depends on:
 
-It should also prove:
+- route mode
+- root-vs-nested context
+- immediate owner table
+- actual property name from the path
 
-- default sub-type table reuse works
-- explicit path-specific table override works
-- explicit inline materialization works
+Not only on the target type/table.
 
-## Deliberate Non-Goals For This Note
+## Identity Reuse Rules
 
-This note does not yet define:
+The schema builder keeps shared registries for:
 
-- final table naming rules
-- exact storage override syntax
-- exact one-to-many vs many-to-many defaults
-- exact SQL sync algorithm
-- exact planner class layout
+- primary tables by path
+- suppressed synthetic helper tables
+- relation identities
 
-Those should follow after the traversal-driven materialization approach is validated on the first real case.
+This is what allows:
+
+- all-types pass
+- then `App` pass
+- into one shared in-memory schema
+
+without recreating parallel schema objects.
+
+Important verified rules:
+
+1. canonical reused type tables must not be renamed into `parent_child` path tables
+2. synthetic root helper suppression must not block a real class table of the same name
+3. relation identities must be reused across reverse/shared relation paths
+
+These rules are implemented mainly in:
+
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:1)
+
+## Legacy-Specific Rules We Keep
+
+The current new ORM still intentionally preserves some legacy-specific behavior because it is necessary for schema parity:
+
+- helper-table model collections
+- scalar collections always getting a helper table
+- abstract-target shared storage with `$_type`
+- App-root default `one_to_many` collection behavior
+- legacy owner/backref naming conventions
+
+These are compatibility rules.
+
+They should be documented explicitly rather than hidden in ad hoc code paths.
+
+## What The DB Builder Actually Creates
+
+The current builder creates in-memory:
+
+- `db_database`
+- `db_table`
+- `db_column`
+- `db_index`
+
+It does not talk directly to MySQL during this phase.
+
+So “build DB structure” currently means:
+
+- create and merge schema objects in memory
+
+not:
+
+- emit SQL
+- sync a live database
+
+That work happens from:
+
+- [base/db/structure_builder.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/structure_builder.phs:1)
+
+## Verified Current Result
+
+With the current filtered comparison scope:
+
+- missing in-scope tables: `0`
+- extra in-scope tables: accepted/out-of-scope only
+- missing in-scope columns: `0`
+- extra in-scope columns: `0`
+- in-scope type mismatches: `0`
+
+Reference status note:
+
+- [new_orm_vs_legacy_schema_diff_2026_05_19.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/new_orm_vs_legacy_schema_diff_2026_05_19.md:1)
+
+## What Still Belongs Elsewhere
+
+This document intentionally does not try to fully specify:
+
+- query planning
+- hydration/reverse mapping contracts
+- CRUD merge rules
+- DB sync/apply
+
+Those should stay in separate focused documents.
+
+## Recommended Reading
+
+For the closely related relation-specific rules:
+
+- [openm3_relation_rule_sheet.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/openm3_relation_rule_sheet.md:1)
+
+For the current parity/result snapshot:
+
+- [new_orm_vs_legacy_schema_diff_2026_05_19.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/new_orm_vs_legacy_schema_diff_2026_05_19.md:1)
