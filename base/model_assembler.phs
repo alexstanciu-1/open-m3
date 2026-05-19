@@ -42,6 +42,16 @@ class mixed_hash_box
 	public $items hash<mixed> = [];
 }
 
+class string_list_hash_box
+{
+	public $items hash<string_list_box> = [];
+}
+
+class int_hash_box
+{
+	public $items hash<int> = [];
+}
+
 class legacy_orm_build_entry
 {
 	public ?string $path = null;
@@ -54,8 +64,16 @@ class legacy_orm_build_entry
 class model_assembler
 {
 	public $raw_models vector<model_cache_entry> = [];
+	public $raw_models_by_key hash<om3\base\schema\model> = [];
 	public $assembled_models vector<model_cache_entry> = [];
+	public $assembled_models_by_key hash<om3\base\schema\model> = [];
+	public $assembled_model_entry_index hash<int> = [];
 	public $errors vector<string> = [];
+	public $legacy_type_maps hash<mixed_hash_box> = [];
+	public $legacy_children_by_parent hash<string_list_hash_box> = [];
+	public $legacy_concrete_type_counts_by_table hash<int_hash_box> = [];
+	public $legacy_instantiable_types_by_type hash<string_list_box> = [];
+	public $legacy_visible_properties_by_type hash<property_hash_result> = [];
 
 	public function register_raw_model(
 		string $type_key,
@@ -67,11 +85,24 @@ class model_assembler
 			$model->name = $type_key;
 		}
 
+		if (isset($this->raw_models_by_key[$type_key])) {
+			$this->raw_models_by_key[$type_key] = $model;
+			for ($i = 0; $i < count($this->raw_models); $i++) {
+				$entry = $this->raw_models[$i];
+				if ($entry->key == $type_key) {
+					$entry->model = $model;
+					$entry->path = $path;
+					return;
+				}
+			}
+		}
+
 		$entry = new model_cache_entry();
 		$entry->key = $type_key;
 		$entry->model = $model;
 		$entry->path = $path;
 		$this->raw_models[] = $entry;
+		$this->raw_models_by_key[$type_key] = $model;
 	}
 
 	public function load_model_file(string $type_key, string $path): bool
@@ -92,22 +123,16 @@ class model_assembler
 
 	public function find_raw_model(string $type_key): ?\om3\base\schema\model
 	{
-		for ($i = 0; $i < count($this->raw_models); $i++) {
-			$entry = $this->raw_models[$i];
-			if ($entry->key == $type_key) {
-				return $entry->model;
-			}
+		if (isset($this->raw_models_by_key[$type_key])) {
+			return $this->raw_models_by_key[$type_key];
 		}
 		return null;
 	}
 
 	public function find_assembled_model(string $assembled_path_key): ?\om3\base\schema\model
 	{
-		for ($i = 0; $i < count($this->assembled_models); $i++) {
-			$entry = $this->assembled_models[$i];
-			if ($entry->key == $assembled_path_key) {
-				return $entry->model;
-			}
+		if (isset($this->assembled_models_by_key[$assembled_path_key])) {
+			return $this->assembled_models_by_key[$assembled_path_key];
 		}
 		return null;
 	}
@@ -432,10 +457,14 @@ class model_assembler
 		return $result;
 	}
 
-	public function build_legacy_orm_root(string $dir, string $root_class): ?\om3\base\orm\orm_root
+	public function build_legacy_orm_root(
+		string $dir,
+		string $root_class,
+		?int $max_depth_override = null
+	): ?\om3\base\orm\orm_root
 	{
 		$type_map_box = $this->load_legacy_type_map($dir);
-		return $this->build_legacy_orm_root_from_map($type_map_box, $root_class, $dir);
+		return $this->build_legacy_orm_root_from_map($type_map_box, $root_class, $dir, $max_depth_override);
 	}
 
 	public function list_legacy_instantiable_root_types(string $dir): string_list_box
@@ -460,7 +489,8 @@ class model_assembler
 	public function build_legacy_orm_root_from_map(
 		mixed_hash_box $type_map_box,
 		string $root_class,
-		?string $source_dir = null
+		?string $source_dir = null,
+		?int $max_depth_override = null
 	): ?\om3\base\orm\orm_root
 	{
 		$type_map = $type_map_box->items;
@@ -469,23 +499,37 @@ class model_assembler
 			$this->errors[] = "legacy_missing_root:" . ($source_dir ?? "") . ":" . $root_class;
 			return null;
 		}
+		$root_type_key_text string = (string) $root_type_key;
 
-		$root_type_data = $type_map[$root_type_key];
+		$root_type_data = $type_map[$root_type_key_text];
 		$root = new \om3\base\orm\orm_root();
-		$root->path = $root_type_key;
-		$root->name = $this->legacy_last_segment($root_type_key);
+		$root->path = $root_type_key_text;
+		$root->name = $this->legacy_last_segment($root_type_key_text);
 		$root->is_root = true;
 		$root->is_scalar = false;
 		$root->is_list = false;
 		$root->type = $root_type_key;
+		if ($max_depth_override !== null) {
+			$depth_override int = (int) $max_depth_override;
+			if ($depth_override > 0) {
+				$root->max_depth = $depth_override;
+			}
+		}
+		$shared_table_counts = $this->get_legacy_concrete_type_counts_by_table($type_map_box, $source_dir ?? "");
+		if (isset($root_type_data["storage"]) && isset($root_type_data["storage"]["table"])) {
+			$root_table_name = trim((string) $root_type_data["storage"]["table"]);
+			if ($root_table_name !== "" && isset($shared_table_counts->items[$root_table_name]) && $shared_table_counts->items[$root_table_name] > 1) {
+				$root->entry_type_column = "\$_type";
+			}
+		}
 		$this->populate_legacy_visible_properties($root, $root_type_data, $type_map_box);
-		$root->type_models[] = $this->build_legacy_model_stub($root_type_key);
+		$root->type_models[] = $this->build_legacy_model_stub($root_type_key_text, $root_type_data);
 
 		$current_level vector<legacy_orm_build_entry> = [];
 		$processed_plain_types hash<bool> = [];
 		$root_entry = new legacy_orm_build_entry();
-		$root_entry->path = $root_type_key;
-		$root_entry->type_key = $root_type_key;
+		$root_entry->path = $root_type_key_text;
+		$root_entry->type_key = $root_type_key_text;
 		$root_entry->type_data = $root_type_data;
 		$root_entry->parent_node = $root;
 		$current_level[] = $root_entry;
@@ -493,6 +537,7 @@ class model_assembler
 		$depth int = 0;
 		while ((count($current_level) > 0) && ($depth < $root->max_depth)) {
 			$next_level vector<legacy_orm_build_entry> = [];
+			$will_descend_further = (($depth + 1) < $root->max_depth);
 
 			for ($entry_index = 0; $entry_index < count($current_level); $entry_index++) {
 				$entry = $current_level[$entry_index];
@@ -534,12 +579,16 @@ class model_assembler
 						if ($this->is_legacy_scalar_type($type_name)) {
 							continue;
 						}
-						$child->type_models[] = $this->build_legacy_model_stub($type_name);
+						$child_type_data = null;
+						if (isset($type_map[$type_name])) {
+							$child_type_data = $type_map[$type_name];
+						}
+						$child->type_models[] = $this->build_legacy_model_stub($type_name, $child_type_data);
 						$has_model_target = true;
 					}
 
 						$child->is_scalar = !$has_model_target;
-						if (!$child->is_scalar && count($type_names) > 0) {
+						if ($will_descend_further && !$child->is_scalar && count($type_names) > 0) {
 							$first_type = $type_names[0];
 							if (isset($type_map[$first_type])) {
 								$child_type_data = $type_map[$first_type];
@@ -550,7 +599,7 @@ class model_assembler
 					$entry_parent->children[] = $child;
 					$root->nodes[] = $child;
 
-						if (!$child->is_scalar) {
+						if ($will_descend_further && !$child->is_scalar) {
 							for ($type_index = 0; $type_index < count($type_names); $type_index++) {
 								$type_name = $type_names[$type_index];
 								if (!isset($type_map[$type_name])) {
@@ -579,7 +628,7 @@ class model_assembler
 		if ($depth >= $root->max_depth && count($current_level) > 0) {
 			$error = new \om3\base\orm\orm_error();
 			$error->code = "depth_limit_reached";
-			$error->path = $root_type_key;
+			$error->path = $root_type_key_text;
 			$error->message = "Legacy ORM graph build reached the configured depth limit.";
 			$root->errors[] = $error;
 		}
@@ -637,18 +686,19 @@ class model_assembler
 
 	private function put_assembled_model(string $assembled_path_key, \om3\base\schema\model $assembled): void
 	{
-		for ($i = 0; $i < count($this->assembled_models); $i++) {
-			$existing = $this->assembled_models[$i];
-			if ($existing->key == $assembled_path_key) {
-				$existing->model = $assembled;
-				return;
-			}
+		$this->assembled_models_by_key[$assembled_path_key] = $assembled;
+		if (isset($this->assembled_model_entry_index[$assembled_path_key])) {
+			$index = $this->assembled_model_entry_index[$assembled_path_key];
+			$existing = $this->assembled_models[$index];
+			$existing->model = $assembled;
+			return;
 		}
 
 		$entry = new model_cache_entry();
 		$entry->key = $assembled_path_key;
 		$entry->model = $assembled;
 		$this->assembled_models[] = $entry;
+		$this->assembled_model_entry_index[$assembled_path_key] = count($this->assembled_models) - 1;
 	}
 
 	private function validate_sub_usage(string $assembled_path_key, \om3\base\schema\model_property $usage_property): bool
@@ -844,10 +894,13 @@ class model_assembler
 				}
 			}
 			if (isset($property_storage["oneToMany"])) {
-				if ($out->mode === "unknown") {
+				if ($this->legacy_property_is_list($property_data) && $out->mode === "unknown") {
 					$out->mode = "collection_table";
 				}
-				$columns->items[] = (string) $property_storage["oneToMany"];
+				$one_to_many_value = trim((string) $property_storage["oneToMany"]);
+				if ($one_to_many_value !== "" && $one_to_many_value !== "1") {
+					$columns->items[] = $one_to_many_value;
+				}
 			}
 			if (isset($property_storage["manyToMany"])) {
 				$out->via_collection_table = true;
@@ -879,7 +932,7 @@ class model_assembler
 			if ($this->legacy_property_is_list($property_data)) {
 				$out->mode = "collection_table";
 			} else if ($this->legacy_property_targets_models($type_names, $type_map)) {
-				$out->mode = "type_table";
+				$out->mode = "ref_column";
 			} else {
 				$out->mode = "value_column";
 			}
@@ -1212,12 +1265,14 @@ class model_assembler
 		$has_collection_storage = ($collection_table !== null);
 		$has_many_to_many = ($property_storage !== null && isset($property_storage["manyToMany"]));
 		$has_one_to_many = ($property_storage !== null && isset($property_storage["oneToMany"]));
+		$parent_is_app_root = $this->legacy_parent_is_app_root($parent_type_data);
 		$root_default_one_to_many = (
 			$is_list &&
 			$targets_models &&
 			!$has_collection_storage &&
 			!$has_many_to_many &&
 			!$has_one_to_many &&
+			$parent_is_app_root &&
 			$node->parent !== null &&
 			$node->parent->is_root
 		);
@@ -1254,6 +1309,9 @@ class model_assembler
 				}
 			}
 			if ($table_name === "" && count($tables->items) > 0) {
+				$table_name = $tables->items[0];
+			}
+			if (($probe->mode === "ref_column" || $probe->mode === "value_column") && count($tables->items) > 0) {
 				$table_name = $tables->items[0];
 			}
 
@@ -1332,6 +1390,7 @@ class model_assembler
 						} else {
 							$item->value_column = $property_name;
 						}
+						$item->scalar_sql_type = $this->legacy_property_sql_type($property_storage, $type_name);
 					} else if ($targets_models) {
 						if ($legacy_column !== null && $legacy_column !== "") {
 							$item->id_column = $legacy_column;
@@ -1438,9 +1497,14 @@ class model_assembler
 		}
 
 		$route_index int = 0;
+		$property_needs_type_column = $this->legacy_property_needs_type_column($property_data, $type_names, $type_map);
 		foreach ($route_map as $route) {
-			if (count($route->types) > 1 && $targets_models) {
-				$route->type_column = "\$_type";
+			if ((count($route->types) > 1 && $targets_models) || ($property_needs_type_column && (($route->mode ?? "") === "ref_column"))) {
+				$type_column_base = $route->id_column;
+				if ($type_column_base === null || $type_column_base === "") {
+					$type_column_base = "\$" . $property_name;
+				}
+				$route->type_column = $type_column_base . "\$_type";
 			}
 			$node->mat[] = $route;
 			for ($type_index = 0; $type_index < count($route->types); $type_index++) {
@@ -1456,6 +1520,9 @@ class model_assembler
 			return null;
 		}
 		$value = trim((string) $property_storage[$key]);
+		if ($key === "oneToMany" && $value === "1") {
+			return null;
+		}
 		if ($value === "") {
 			return null;
 		}
@@ -1492,6 +1559,52 @@ class model_assembler
 		return $type_name;
 	}
 
+	private function legacy_property_needs_type_column(
+		mixed $property_data,
+		string_list_box $type_names,
+		mixed_hash_box $type_map
+	): bool
+	{
+		if (!$this->legacy_property_targets_models($type_names, $type_map)) {
+			return false;
+		}
+		if (count($type_names->items) > 1) {
+			return true;
+		}
+
+		$declared_types = $this->legacy_declared_model_type_names($property_data);
+		for ($i = 0; $i < count($declared_types->items); $i++) {
+			$type_name = $declared_types->items[$i];
+			if (isset($type_map->items[$type_name]) && $this->legacy_type_is_abstract($type_map->items[$type_name])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private function legacy_declared_model_type_names(mixed $property_data): string_list_box
+	{
+		$out = new string_list_box();
+		if (!isset($property_data["types"])) {
+			return $out;
+		}
+		$types = $property_data["types"];
+		if (isset($types["options"])) {
+			foreach ($types["options"] as $option_name => $option_value) {
+				$type_name = $this->normalize_legacy_type_name((string) $option_value);
+				if ($type_name !== null && $type_name !== "" && !$this->is_legacy_scalar_type($type_name)) {
+					$out->items[] = $type_name;
+				}
+			}
+		} else {
+			$type_name = $this->normalize_legacy_type_name((string) $types);
+			if ($type_name !== null && $type_name !== "" && !$this->is_legacy_scalar_type($type_name)) {
+				$out->items[] = $type_name;
+			}
+		}
+		return $this->unique_strings($out);
+	}
+
 	private function infer_legacy_collection_table_name(string_list_box $tables, string $property_name): ?string
 	{
 		if (count($tables->items) <= 0) {
@@ -1512,6 +1625,9 @@ class model_assembler
 		$parent_table = $tables->items[0];
 		if ($parent_table === "") {
 			return null;
+		}
+		if (substr($parent_table, 0, 1) === "$") {
+			return "$" . $parent_table;
 		}
 		return $parent_table;
 	}
@@ -1634,11 +1750,16 @@ class model_assembler
 
 	private function load_legacy_type_map(string $dir): mixed_hash_box
 	{
+		if (isset($this->legacy_type_maps[$dir])) {
+			return $this->legacy_type_maps[$dir];
+		}
+
 		$type_map = new mixed_hash_box();
 		$entries vector<string> = [];
 		$err /** error_t */;
 		if (!take($entries, $err, fs_scan($dir))) {
 			$this->errors[] = "legacy_scan_failed:" . $dir;
+			$this->legacy_type_maps[$dir] = $type_map;
 			return $type_map;
 		}
 
@@ -1660,7 +1781,76 @@ class model_assembler
 			$type_map->items[$type_key] = $data;
 		}
 
+		$this->legacy_type_maps[$dir] = $type_map;
 		return $type_map;
+	}
+
+	private function build_legacy_children_index(mixed_hash_box $type_map): string_list_hash_box
+	{
+		$out = new string_list_hash_box();
+		foreach ($type_map->items as $candidate_name => $candidate_data) {
+			if ($candidate_data === null || !isset($candidate_data["parent"])) {
+				continue;
+			}
+			$raw_parent = $candidate_data["parent"];
+			if ($raw_parent === null) {
+				continue;
+			}
+			$candidate_parent = $this->normalize_legacy_type_name((string) $raw_parent);
+			if ($candidate_parent === null || $candidate_parent === "") {
+				continue;
+			}
+			if (!isset($out->items[$candidate_parent])) {
+				$out->items[$candidate_parent] = new string_list_box();
+			}
+			$out->items[$candidate_parent]->items[] = (string) $candidate_name;
+		}
+		return $out;
+	}
+
+	private function get_legacy_children_index(
+		mixed_hash_box $type_map,
+		string $cache_key
+	): string_list_hash_box
+	{
+		if (isset($this->legacy_children_by_parent[$cache_key])) {
+			return $this->legacy_children_by_parent[$cache_key];
+		}
+
+		$out = $this->build_legacy_children_index($type_map);
+		$this->legacy_children_by_parent[$cache_key] = $out;
+		return $out;
+	}
+
+	private function get_legacy_concrete_type_counts_by_table(
+		mixed_hash_box $type_map,
+		string $cache_key
+	): int_hash_box
+	{
+		if (isset($this->legacy_concrete_type_counts_by_table[$cache_key])) {
+			return $this->legacy_concrete_type_counts_by_table[$cache_key];
+		}
+
+		$out = new int_hash_box();
+		foreach ($type_map->items as $type_key => $type_data) {
+			if ($type_data === null || $this->legacy_type_is_abstract($type_data)) {
+				continue;
+			}
+			if (!isset($type_data["storage"]) || !isset($type_data["storage"]["table"])) {
+				continue;
+			}
+			$table_name = trim((string) $type_data["storage"]["table"]);
+			if ($table_name === "") {
+				continue;
+			}
+			if (!isset($out->items[$table_name])) {
+				$out->items[$table_name] = 0;
+			}
+			$out->items[$table_name] = $out->items[$table_name] + 1;
+		}
+
+		$this->legacy_concrete_type_counts_by_table[$cache_key] = $out;
+		return $out;
 	}
 
 	private function populate_legacy_visible_properties(
@@ -1669,18 +1859,31 @@ class model_assembler
 		mixed_hash_box $type_map
 	): void
 	{
+		$type_cache_key = $this->legacy_type_cache_key($type_data);
+		if ($type_cache_key !== null && isset($this->legacy_visible_properties_by_type[$type_cache_key])) {
+			$cached = $this->legacy_visible_properties_by_type[$type_cache_key];
+			$node->properties = $cached->properties;
+			return;
+		}
+
 		$out hash<om3\base\schema\model_property> = [];
 		if ($type_data === null || !isset($type_data["properties"])) {
 			$node->properties = $out;
 			return;
 		}
+		$raw_properties = $type_data["properties"];
+		if ($raw_properties === null) {
+			$node->properties = $out;
+			return;
+		}
 
-		foreach ($type_data["properties"] as $property_name => $property_data) {
+		foreach ($raw_properties as $property_name => $property_data) {
 			if (!$this->legacy_property_is_materialized($property_data)) {
 				continue;
 			}
 			$property = new \om3\base\schema\model_property();
-			$property->name = $this->normalize_legacy_property_name((string) $property_name);
+			$normalized_property_name string = $this->normalize_legacy_property_name((string) $property_name);
+			$property->name = $normalized_property_name;
 			$type_names = $this->collect_legacy_property_types($property_data, $type_map);
 			$property->type_list = $this->legacy_property_is_list($property_data);
 			$property->type_name = $this->resolve_common_legacy_type($type_names, $type_map);
@@ -1706,10 +1909,16 @@ class model_assembler
 				}
 			}
 
-			$out[$property->name] = $property;
+			$out[$normalized_property_name] = $property;
 		}
 
 		$node->properties = $out;
+		if ($type_cache_key !== null) {
+			$cache_entry = new property_hash_result();
+			$cache_entry->properties = $out;
+			$cache_entry->property_count = count($out);
+			$this->legacy_visible_properties_by_type[$type_cache_key] = $cache_entry;
+		}
 	}
 
 	private function legacy_property_is_materialized(mixed $property_data): bool
@@ -1748,25 +1957,33 @@ class model_assembler
 		}
 
 		$types_data = $property_data["types"];
-		if (isset($property_data["types"]["options"])) {
-			$options = $property_data["types"]["options"];
+		if ($types_data === null) {
+			return $out;
+		}
+		if (isset($types_data["options"])) {
+			$options = $types_data["options"];
+			if ($options === null) {
+				return $this->unique_strings($out);
+			}
 			foreach ($options as $option_name => $option_type) {
 				$normalized = $this->normalize_legacy_type_name((string) $option_type);
 				if ($normalized === null || $normalized === "") {
 					$normalized = $this->normalize_legacy_type_name((string) $option_name);
 				}
 				if ($normalized !== null && $normalized !== "") {
-					$this->append_legacy_instantiable_types($out, $normalized, $type_map);
+					$normalized_text string = (string) $normalized;
+					$this->append_legacy_instantiable_types($out, $normalized_text, $type_map);
 				}
 			}
 			return $this->unique_strings($out);
 		}
 
-		if (isset($property_data["types"][0])) {
+		if (isset($types_data[0])) {
 			foreach ($types_data as $type_name) {
 				$normalized = $this->normalize_legacy_type_name((string) $type_name);
 				if ($normalized !== null && $normalized !== "") {
-					$this->append_legacy_instantiable_types($out, $normalized, $type_map);
+					$normalized_text string = (string) $normalized;
+					$this->append_legacy_instantiable_types($out, $normalized_text, $type_map);
 				}
 			}
 			return $this->unique_strings($out);
@@ -1774,7 +1991,8 @@ class model_assembler
 
 		$normalized = $this->normalize_legacy_type_name((string) $types_data);
 		if ($normalized !== null && $normalized !== "") {
-			$this->append_legacy_instantiable_types($out, $normalized, $type_map);
+			$normalized_text string = (string) $normalized;
+			$this->append_legacy_instantiable_types($out, $normalized_text, $type_map);
 		}
 		return $this->unique_strings($out);
 	}
@@ -1803,6 +2021,10 @@ class model_assembler
 
 	private function collect_legacy_instantiable_types_for(string $type_name, mixed_hash_box $type_map): string_list_box
 	{
+		if (isset($this->legacy_instantiable_types_by_type[$type_name])) {
+			return $this->legacy_instantiable_types_by_type[$type_name];
+		}
+
 		$out = new string_list_box();
 		$normalized = $this->normalize_legacy_type_name($type_name);
 		if ($normalized === null || $normalized === "") {
@@ -1812,6 +2034,7 @@ class model_assembler
 		$seen hash<bool> = [];
 		$queue vector<string> = [];
 		$queue[] = $normalized;
+		$children_by_parent = $this->get_legacy_children_index($type_map, "__default__");
 
 		for ($queue_index = 0; $queue_index < count($queue); $queue_index++) {
 			$current = $queue[$queue_index];
@@ -1830,18 +2053,33 @@ class model_assembler
 				$out->items[] = $current;
 			}
 
-			foreach ($type_map->items as $candidate_name => $candidate_data) {
-				if ($candidate_data === null || !isset($candidate_data["parent"])) {
-					continue;
-				}
-				$candidate_parent = $this->normalize_legacy_type_name((string) $candidate_data["parent"]);
-				if ($candidate_parent === $current) {
-					$queue[] = (string) $candidate_name;
+			if (isset($children_by_parent->items[$current])) {
+				$children = $children_by_parent->items[$current];
+				for ($child_index = 0; $child_index < count($children->items); $child_index++) {
+					$queue[] = $children->items[$child_index];
 				}
 			}
 		}
 
-		return $this->unique_strings($out);
+		$unique = $this->unique_strings($out);
+		$this->legacy_instantiable_types_by_type[$type_name] = $unique;
+		return $unique;
+	}
+
+	private function legacy_type_cache_key(mixed $type_data): ?string
+	{
+		if ($type_data === null || !isset($type_data["class"])) {
+			return null;
+		}
+		$class_name = $type_data["class"];
+		if ($class_name === null) {
+			return null;
+		}
+		$normalized = $this->normalize_legacy_type_name((string) $class_name);
+		if ($normalized === null || $normalized === "") {
+			return null;
+		}
+		return (string) $normalized;
 	}
 
 	private function legacy_type_is_abstract(mixed $type_data): bool
@@ -1936,10 +2174,21 @@ class model_assembler
 		return "qmodel";
 	}
 
-	private function build_legacy_model_stub(string $type_name): \om3\base\schema\model
+	private function build_legacy_model_stub(
+		string $type_name,
+		?mixed $type_data = null
+	): \om3\base\schema\model
 	{
 		$out = new \om3\base\schema\model();
 		$out->name = $type_name;
+		if ($type_data !== null && isset($type_data["storage"]) && $type_data["storage"] !== null) {
+			$storage_data = $type_data["storage"];
+			if (isset($storage_data["table"]) && $storage_data["table"] !== null) {
+				$storage = new \om3\base\schema\storage();
+				$storage->table = (string) $storage_data["table"];
+				$out->attached_storage = $storage;
+			}
+		}
 		return $out;
 	}
 
@@ -1948,7 +2197,8 @@ class model_assembler
 		if ($type_name === null) {
 			return null;
 		}
-		$trimmed = trim($type_name);
+		$type_text string = (string) $type_name;
+		$trimmed = trim($type_text);
 		if ($trimmed === "") {
 			return null;
 		}
@@ -1957,6 +2207,15 @@ class model_assembler
 			$trimmed = substr($trimmed, 1);
 		}
 		return $trimmed;
+	}
+
+	private function legacy_parent_is_app_root(mixed $type_data): bool
+	{
+		if ($type_data === null || !isset($type_data["class"]) || $type_data["class"] === null) {
+			return false;
+		}
+		$class_name = $this->normalize_legacy_type_name((string) $type_data["class"]);
+		return ($class_name !== null && $class_name === "Omi/App");
 	}
 
 	private function normalize_legacy_property_name(string $property_name): string

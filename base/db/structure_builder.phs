@@ -21,6 +21,16 @@ class structure_builder
 {
 	public $errors vector<string> = [];
 	public bool $legacy_full_support = false;
+	public float $metric_begin_db_seconds = 0.0;
+	public float $metric_append_total_seconds = 0.0;
+	public float $metric_append_index_primary_seconds = 0.0;
+	public float $metric_append_reserve_seconds = 0.0;
+	public float $metric_append_apply_seconds = 0.0;
+	public int $metric_append_roots = 0;
+	public int $metric_append_nodes_indexed = 0;
+	public int $metric_append_nodes_reserved = 0;
+	public int $metric_append_nodes_applied = 0;
+	public bool $metric_trace_first_append = false;
 	private $orm_primary_tables hash<string> = [];
 	private $orm_suppressed_tables hash<string> = [];
 	private $orm_relation_identities hash<bool> = [];
@@ -137,6 +147,7 @@ class structure_builder
 
 	public function begin_legacy_orm_database(): db_database
 	{
+		$begin_start = $this->current_time_seconds();
 		$this->legacy_full_support = true;
 		$empty_primary_tables hash<string> = [];
 		$this->orm_primary_tables = $empty_primary_tables;
@@ -146,6 +157,7 @@ class structure_builder
 		$this->orm_relation_identities = $empty_relation_identities;
 		$db = new db_database();
 		$db->name = "default";
+		$this->metric_begin_db_seconds = $this->metric_begin_db_seconds + ($this->current_time_seconds() - $begin_start);
 		return $db;
 	}
 
@@ -154,18 +166,33 @@ class structure_builder
 		\om3\base\orm\orm_root $root
 	): void
 	{
+		$append_start = $this->current_time_seconds();
+		$trace_this_append = $this->metric_trace_first_append && ($this->metric_append_roots == 0);
+		if ($trace_this_append) {
+			echo "trace:first_append:start:", ($root->path ?? ""), ":", count($root->nodes), "\n";
+		}
 		$root_table_name = $this->resolve_orm_root_table_name($root);
 		if ($root_table_name === null || $root_table_name === "") {
 			$this->errors[] = "missing_orm_root_table";
 			return;
 		}
+		if ($trace_this_append) {
+			echo "trace:first_append:root_table:", ($root->path ?? ""), ":", $root_table_name, "\n";
+		}
 
 		$root_table = $this->ensure_table($db, $root_table_name);
 		$this->ensure_id_column($root_table);
+		if ($root->entry_type_column !== null && $root->entry_type_column !== "") {
+			$this->ensure_type_column($root_table, $this->normalize_legacy_column_name($root->entry_type_column));
+		}
 		if ($root->path !== null) {
 			$this->orm_primary_tables[$root->path] = $root_table_name;
 		}
 
+		$index_start = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:index_primary:start:", ($root->path ?? ""), "\n";
+		}
 		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
 			$node = $root->nodes[$node_index];
 			$primary_table = $this->resolve_node_primary_table_name($node);
@@ -173,16 +200,44 @@ class structure_builder
 				$this->orm_primary_tables[$node->path] = $primary_table;
 			}
 		}
+		$index_end = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:index_primary:done:", ($root->path ?? ""), ":", ($index_end - $index_start), "\n";
+		}
+		$this->metric_append_index_primary_seconds = $this->metric_append_index_primary_seconds + ($index_end - $index_start);
+		$this->metric_append_nodes_indexed = $this->metric_append_nodes_indexed + count($root->nodes);
 
+		$reserve_start = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:reserve:start:", ($root->path ?? ""), "\n";
+		}
 		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
 			$node = $root->nodes[$node_index];
 			$this->reserve_redundant_root_helper_tables($root_table_name, $node);
 		}
+		$reserve_end = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:reserve:done:", ($root->path ?? ""), ":", ($reserve_end - $reserve_start), "\n";
+		}
+		$this->metric_append_reserve_seconds = $this->metric_append_reserve_seconds + ($reserve_end - $reserve_start);
+		$this->metric_append_nodes_reserved = $this->metric_append_nodes_reserved + count($root->nodes);
 
+		$apply_start = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:apply:start:", ($root->path ?? ""), "\n";
+		}
 		for ($node_index = 0; $node_index < count($root->nodes); $node_index++) {
 			$node = $root->nodes[$node_index];
 			$this->apply_orm_node_materialization($db, $root->path ?? "", $root_table_name, $node);
 		}
+		$apply_end = $this->current_time_seconds();
+		if ($trace_this_append) {
+			echo "trace:first_append:apply:done:", ($root->path ?? ""), ":", ($apply_end - $apply_start), "\n";
+		}
+		$this->metric_append_apply_seconds = $this->metric_append_apply_seconds + ($apply_end - $apply_start);
+		$this->metric_append_nodes_applied = $this->metric_append_nodes_applied + count($root->nodes);
+		$this->metric_append_total_seconds = $this->metric_append_total_seconds + ($apply_end - $append_start);
+		$this->metric_append_roots = $this->metric_append_roots + 1;
 	}
 
 	public static function print_database(db_database $db): void
@@ -344,7 +399,8 @@ class structure_builder
 	private function ensure_scalar_column(db_table $table, string $property_name, string $type_name, bool $required, ?string $sql_type = null): void
 	{
 		$column_name = $this->legacy_full_support ? $this->normalize_legacy_db_name($property_name) : $this->normalize_name($property_name);
-		if ($this->legacy_full_support && (strtolower($column_name) == "id" || strtolower($column_name) == "\$id")) {
+		$column_name_lower = strtolower($column_name);
+		if ($this->legacy_full_support && ($column_name_lower == "id" || $column_name_lower == "\$id")) {
 			return;
 		}
 		if (isset($table->columns[$column_name])) {
@@ -354,7 +410,13 @@ class structure_builder
 		$column = new db_column();
 		$column->parent_table = $table;
 		$column->name = $column_name;
-		$column->type = $this->map_scalar_type(($sql_type !== null && $sql_type !== "") ? $sql_type : $type_name);
+		$mapped_type_source string = $type_name;
+		if ($sql_type !== null) {
+			if ($sql_type !== "") {
+				$mapped_type_source = (string) $sql_type;
+			}
+		}
+		$column->type = $this->map_scalar_type($mapped_type_source);
 		$column->is_nullable = !$required;
 		$table->columns[$column_name] = $column;
 	}
@@ -443,7 +505,10 @@ class structure_builder
 		}
 		$paren_pos = strpos($type_key, "(");
 		$type_base = ($paren_pos === false) ? $type_key : substr($type_key, 0, $paren_pos);
-		if ($type_base === "enum" || $type_base === "set" || $type_base === "varchar" || $type_base === "char" || $type_base === "text" || $type_base === "datetime" || $type_base === "date" || $type_base === "time" || $type_base === "float" || $type_base === "double" || $type_base === "decimal" || $type_base === "numeric" || $type_base === "smallint" || $type_base === "bigint" || $type_base === "tinyint") {
+		if ($type_base === "enum" || $type_base === "set" || $type_base === "varchar" || $type_base === "char" || $type_base === "text" || $type_base === "mediumtext" || $type_base === "longtext" || $type_base === "datetime" || $type_base === "date" || $type_base === "time" || $type_base === "float" || $type_base === "double" || $type_base === "decimal" || $type_base === "numeric" || $type_base === "smallint" || $type_base === "bigint" || $type_base === "tinyint") {
+			if ($this->legacy_full_support && $type_base === "double") {
+				return "float";
+			}
 			return $type_base;
 		}
 		if (($type_key == "int") || ($type_key == "integer")) {
@@ -487,8 +552,12 @@ class structure_builder
 		$out = str_replace(".", "_", $out);
 		$out = str_replace("-", "_", $out);
 		$out = str_replace("$", "", $out);
-		while (strpos($out, "__") !== false) {
-			$out = str_replace("__", "_", $out);
+		while (true) {
+			$collapsed = str_replace("__", "_", $out);
+			if ($collapsed === $out) {
+				break;
+			}
+			$out = $collapsed;
 		}
 		if (str_starts_with($out, "_")) {
 			$out = substr($out, 1);
@@ -503,14 +572,27 @@ class structure_builder
 		$out = str_replace("/", "_", $out);
 		$out = str_replace(".", "_", $out);
 		$out = str_replace("-", "_", $out);
-		while (strpos($out, "__") !== false) {
-			$out = str_replace("__", "_", $out);
+		while (true) {
+			$collapsed = str_replace("__", "_", $out);
+			if ($collapsed === $out) {
+				break;
+			}
+			$out = $collapsed;
 		}
 		return $out;
 	}
 
 	private function resolve_orm_root_table_name(\om3\base\orm\orm_root $root): ?string
 	{
+		if (count($root->type_models) > 0) {
+			$root_model = $root->type_models[0];
+			if ($root_model !== null && $root_model->attached_storage !== null) {
+				$storage_table = $root_model->attached_storage->table;
+				if ($storage_table !== null && $storage_table !== "") {
+					return (string) $storage_table;
+				}
+			}
+		}
 		$path = $root->path;
 		if ($path === null || $path === "") {
 			return null;
@@ -581,7 +663,7 @@ class structure_builder
 				} else if ($uses_synthetic_helper && $parent_table_name !== null) {
 					$this->ensure_named_ref_column($link_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
 				} else {
-					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $node->name), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $this->resolve_owner_property_name($root_table_name, $node)), true);
 				}
 				if ($uses_synthetic_helper && $mat->id_column !== null && $mat->id_column !== "") {
 					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name("$" . $node->name), false);
@@ -645,7 +727,21 @@ class structure_builder
 				if ($mat->owner_column !== null && $mat->owner_column !== "") {
 					$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->owner_column), false);
 				} else {
-					$this->ensure_parent_ref_column($target_table, $root_table_name);
+					$owner_source_table = $root_table_name;
+					$owner_property_name = $this->resolve_owner_property_name($root_table_name, $node);
+					$parent_table_name_for_owner = $this->resolve_parent_primary_table_name($node);
+					if ($parent_table_name_for_owner !== null && $node->parent !== null && !$node->parent->is_root) {
+						$owner_source_table = $parent_table_name_for_owner;
+						$owner_property_name = $node->name ?? $owner_property_name;
+					}
+					$implicit_owner_column = (substr($owner_source_table, 0, 1) === '$')
+						? $this->legacy_owner_column_name($owner_source_table, $owner_property_name)
+						: $this->legacy_ref_role_column_name($owner_source_table . "$" . $owner_property_name);
+					$this->ensure_named_ref_column(
+						$target_table,
+						$implicit_owner_column,
+						false
+					);
 				}
 			}
 
@@ -784,7 +880,36 @@ class structure_builder
 		if (substr($parent, 0, 1) === "$") {
 			$parent = substr($parent, 1);
 		}
-		return "$$" . $parent . "$" . $property_name;
+		$property = $property_name;
+		while (substr($property, 0, 1) === "$") {
+			$property = substr($property, 1);
+		}
+		return "$$" . $parent . "$" . $property;
+	}
+
+	private function resolve_owner_property_name(string $root_table_name, \om3\base\orm\orm_node $node): string
+	{
+		if ($this->legacy_full_support && $root_table_name === '$App' && $node->path !== null) {
+			$prefix = "Omi/App.";
+			if (str_starts_with($node->path, $prefix)) {
+				$remainder = substr($node->path, strlen($prefix));
+				if ($remainder !== "") {
+					$parts = explode(".", $remainder);
+					if (count($parts) > 0) {
+						$first = (string) $parts[0];
+						if ($first !== "") {
+							return $first;
+						}
+					}
+				}
+			}
+		}
+		return $node->name ?? "";
+	}
+
+	private function current_time_seconds(): float
+	{
+		return 0.0;
 	}
 
 	private function legacy_collection_parent_ref_name(string $parent_table_name): string
@@ -833,9 +958,27 @@ class structure_builder
 				continue;
 			}
 			$table_name = $this->legacy_collection_child_table_name($root_table_name, $node->name);
+			if ($this->node_has_real_type_table($node, $table_name)) {
+				return;
+			}
 			$this->orm_suppressed_tables[$table_name] = $table_name;
 			return;
 		}
+	}
+
+	private function node_has_real_type_table(\om3\base\orm\orm_node $node, string $table_name): bool
+	{
+		for ($i = 0; $i < count($node->type_models); $i++) {
+			$type_model = $node->type_models[$i];
+			if ($type_model === null || $type_model->attached_storage === null) {
+				continue;
+			}
+			$type_table = $type_model->attached_storage->table;
+			if ($type_table !== null && $type_table === $table_name) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private function should_skip_suppressed_table(string $table_name): bool

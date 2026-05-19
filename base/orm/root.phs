@@ -6,4 +6,5 @@ class orm_root extends orm_node_base
 	public $nodes vector<orm_node> = [];
 	public $errors vector<orm_error> = [];
 	public int $max_depth = 16;
+	public ?string $entry_type_column = null;
 }
