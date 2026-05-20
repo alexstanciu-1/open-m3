@@ -1,0 +1,76 @@
+namespace om3\tools\mysqli_fetch_exhaustion_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$argc = cli_argc();
+		$argv = cli_argv();
+
+		if ($argc < 5) {
+			echo "usage: <host> <user> <pass> <database> [port] [socket] [query] [max_rows]\n";
+			return;
+		}
+
+		$host = (string) $argv[1];
+		$user = (string) $argv[2];
+		$pass = (string) $argv[3];
+		$database = (string) $argv[4];
+		$port = (($argc > 5) ? (int) ((string) $argv[5]) : 3306);
+		$socket = (($argc > 6) ? (string) $argv[6] : "");
+		$query = (($argc > 7) ? (string) $argv[7] : "SHOW TABLE STATUS");
+		$max_rows = (($argc > 8) ? (int) ((string) $argv[8]) : 100);
+
+		$conn = new \scpp\mysqli(
+			$host,
+			$user,
+			$pass,
+			$database,
+			$port,
+			$socket
+		);
+
+		echo "connect_errno=", (string) $conn->connect_errno, "\n";
+		if ($conn->connect_errno != 0) {
+			echo "connect_error=", (string) $conn->connect_error, "\n";
+			$conn->close();
+			return;
+		}
+
+		$conn->set_charset("utf8mb4");
+		$result = $conn->query($query);
+		if ($result === false) {
+			echo "query=false\n";
+			echo "errno_code=", (string) $conn->errno_code, "\n";
+			echo "error=", (string) $conn->error, "\n";
+			$conn->close();
+			return;
+		}
+		if ($result === true) {
+			echo "query=true\n";
+			$conn->close();
+			return;
+		}
+
+		$count = 0;
+		$row mixed = null;
+		while (true) {
+			$row = $result->fetch_assoc();
+			if ($row === null) {
+				echo "row=null\n";
+				break;
+			}
+			$count++;
+			echo "row=", (string) $count, "\n";
+			if ($count >= $max_rows) {
+				echo "row_limit_reached\n";
+				break;
+			}
+		}
+
+		$conn->close();
+		echo "done\n";
+	}
+}
+
+\om3\tools\mysqli_fetch_exhaustion_probe\main::run();

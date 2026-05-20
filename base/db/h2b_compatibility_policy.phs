@@ -1,0 +1,92 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class h2b_compatibility_policy
+{
+	public static function apply_scope_exclusions(db_database $db): void
+	{
+		$filtered hash<db_table> = [];
+		foreach ($db->tables as $table_name => $table) {
+			if (self::should_exclude_table_name($table_name)) {
+				continue;
+			}
+			$filtered[$table_name] = $table;
+		}
+		$db->tables = $filtered;
+	}
+
+	public static function should_exclude_table_name(string $table_name): bool
+	{
+		if (self::starts_with($table_name, "Sessions_Data_")) {
+			return true;
+		}
+
+		$exact_exclusions vector<string> = self::excluded_table_names();
+		for ($i = 0; $i < count($exact_exclusions); $i++) {
+			if ($table_name == $exact_exclusions[$i]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static function excluded_table_names(): vector<string>
+	{
+		$out vector<string> = [];
+		$out[] = "Early_Booking";
+		$out[] = "Facility";
+		$out[] = "Files";
+		$out[] = "Last_Minute";
+		$out[] = "Search_Check_Ins";
+		$out[] = "Search_Properties";
+		$out[] = "Search_Properties_Rate_Plans";
+		$out[] = "Search_Properties_Rooms";
+		$out[] = "Search_Standard";
+		$out[] = "Search_Standard_Locations";
+		$out[] = "Search_Standard_Properties";
+		$out[] = "Search_Standard_Property_Rooms";
+		$out[] = "Search_Standard_Rate_Plans";
+		$out[] = "Search_Standard_Rooms";
+		$out[] = "Cache_View";
+		$out[] = "Cache_Views";
+		return $out;
+	}
+
+	public static function leaves_charset_unset_by_default(): bool
+	{
+		return true;
+	}
+
+	public static function leaves_collation_unset_by_default(): bool
+	{
+		return true;
+	}
+
+	public static function treats_comment_drift_as_non_semantic(): bool
+	{
+		return true;
+	}
+
+	public static function treats_mysql_integer_display_width_as_non_semantic(): bool
+	{
+		return true;
+	}
+
+	public static function treats_implicit_varchar_255_as_non_semantic(): bool
+	{
+		return true;
+	}
+
+	public static function treats_engine_drift_as_non_semantic(): bool
+	{
+		return true;
+	}
+
+	private static function starts_with(string $value, string $prefix): bool
+	{
+		if (strlen($prefix) > strlen($value)) {
+			return false;
+		}
+		return substr($value, 0, strlen($prefix)) === $prefix;
+	}
+}

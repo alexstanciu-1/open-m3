@@ -1,0 +1,59 @@
+namespace om3\tools\schema_diff_node_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$type_name = "Omi/Address";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+		$root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
+		if ($root === null) {
+			echo "root_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		echo "full_nodes=", count($root->nodes), "\n";
+		for ($node_index = 0; $node_index < count($root->nodes) && $node_index < 6; $node_index++) {
+			$node = $root->nodes[$node_index];
+			$partial = new \om3\base\orm\orm_root();
+			$partial->path = $root->path;
+			$partial->name = $root->name;
+			$partial->is_root = $root->is_root;
+			$partial->is_scalar = $root->is_scalar;
+			$partial->is_list = $root->is_list;
+			$partial->type = $root->type;
+			$partial->max_depth = $root->max_depth;
+			$partial->nodes[] = $node;
+
+			echo "node=", $node_index,
+				":path=", ($node->path ?? ""),
+				":branch=", ($node->branch_kind ?? ""),
+				":mode=", ((count($node->mat) > 0) ? ($node->mat[0]->mode ?? "") : ""),
+				":value=", ((count($node->mat) > 0) ? (($node->mat[0]->value_column ?? "<null>")) : "<no-mat>"),
+				":sql=", ((count($node->mat) > 0) ? (($node->mat[0]->scalar_sql_type ?? "<null>")) : "<no-mat>"),
+				":start\n";
+			$builder = new \om3\base\db\structure_builder();
+			$builder->metric_trace_first_append = true;
+			$db = $builder->begin_legacy_orm_database();
+			$started = php::microtime(true);
+			$builder->append_orm_root_to_database($db, $partial);
+			$ended = php::microtime(true);
+			echo "node=", $node_index,
+				":done:", self::format_seconds($ended - $started),
+				":tables=", count($db->tables),
+				":errors=", count($builder->errors), "\n";
+		}
+	}
+
+	private static function format_seconds(float $seconds): string
+	{
+		return number_format($seconds, 6, ".", "");
+	}
+}
+
+\om3\tools\schema_diff_node_probe\main::run();

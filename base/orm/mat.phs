@@ -14,4 +14,7 @@ class orm_mat
 	public ?string $link_left = null;
 	public ?string $link_right = null;
 	public ?string $scalar_sql_type = null;
+	public mixed $storage_index = null;
+	public mixed $storage_default = null;
+	public ?bool $storage_nullable = null;
 }

@@ -1,0 +1,71 @@
+namespace om3\tools\app_node_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$root_class = "Omi\\App";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+		$root = $assembler->build_legacy_orm_root($dir, $root_class);
+		if ($root === null) {
+			echo "build_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		$targets vector<string> = [
+			"Omi/App.Favorite_Order_Emails",
+			"Omi/App.LoginsLog",
+			"Omi/App.Offer_Categories",
+			"Omi/App.Price_Profiles",
+			"Omi/App.Special_Deals",
+			"Omi/App.Invoice_Languages",
+			"Omi/App.Languages_Spoken",
+			"Omi/App.Contacts",
+			"Omi/App.Privacy_Policy_Pages",
+			"Omi/App.Users.Mail_Sender",
+			"Omi/App.Companies.Mail_Sender",
+		];
+
+		foreach ($root->nodes as $node) {
+			if ($node->path === null) {
+				continue;
+			}
+			$path = (string) $node->path;
+			$matched = false;
+			foreach ($targets as $target) {
+				if ($path === $target) {
+					$matched = true;
+					break;
+				}
+			}
+			if (!$matched) {
+				continue;
+			}
+
+			echo "node=", $path, "\n";
+			echo "  name=", ($node->name ?? ""), "\n";
+			echo "  branch=", ($node->branch_kind ?? ""), "\n";
+			echo "  is_list=", ($node->is_list ? "yes" : "no"), "\n";
+			echo "  type=", ($node->type ?? ""), "\n";
+			foreach ($node->mat as $index => $mat) {
+				echo "  mat#", $index, ":mode=", ($mat->mode ?? "");
+				echo ":table=", ($mat->table ?? "");
+				echo ":link=", ($mat->link_table ?? "");
+				echo ":owner=", ($mat->owner_column ?? "");
+				echo ":id=", ($mat->id_column ?? "");
+				echo ":value=", ($mat->value_column ?? "");
+				echo ":left=", ($mat->link_left ?? "");
+				echo ":right=", ($mat->link_right ?? "");
+				echo ":type=", ($mat->type_column ?? "");
+				echo "\n";
+			}
+		}
+	}
+}
+
+\om3\tools\app_node_probe\main::run();

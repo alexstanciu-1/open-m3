@@ -1,0 +1,92 @@
+namespace om3\tools\mysqli_runtime_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$argc = cli_argc();
+		$argv = cli_argv();
+
+		if ($argc < 5) {
+			echo "usage: <host> <user> <pass> <database> [port] [socket] [query]\n";
+			return;
+		}
+
+		$host = (string) $argv[1];
+		$user = (string) $argv[2];
+		$pass = (string) $argv[3];
+		$database = (string) $argv[4];
+		$port = (($argc > 5) ? (int) ((string) $argv[5]) : 3306);
+		$socket = (($argc > 6) ? (string) $argv[6] : "");
+		$query = (($argc > 7) ? (string) $argv[7] : "SHOW TABLE STATUS");
+
+		echo "stage=connect_begin\n";
+		echo "host=", $host, "\n";
+		echo "user=", $user, "\n";
+		echo "database=", $database, "\n";
+		echo "port=", (string) $port, "\n";
+		echo "socket=", $socket, "\n";
+
+		$conn = new \scpp\mysqli(
+			$host,
+			$user,
+			$pass,
+			$database,
+			$port,
+			$socket
+		);
+
+		echo "stage=connect_done\n";
+		echo "connect_errno=", (string) $conn->connect_errno, "\n";
+		echo "connect_error=", (string) $conn->connect_error, "\n";
+
+		if ($conn->connect_errno != 0) {
+			echo "stage=connect_failed\n";
+			$conn->close();
+			return;
+		}
+
+		echo "stage=set_charset_begin\n";
+		$set_charset_ok = $conn->set_charset("utf8mb4");
+		echo "stage=set_charset_done\n";
+		echo "set_charset_ok=", ($set_charset_ok ? "yes" : "no"), "\n";
+		echo "errno_code=", (string) $conn->errno_code, "\n";
+		echo "error=", (string) $conn->error, "\n";
+
+		echo "stage=query_begin\n";
+		echo "query=", $query, "\n";
+		$result = $conn->query($query);
+		echo "stage=query_done\n";
+
+		if ($result === false) {
+			echo "query_state=false\n";
+			echo "errno_code=", (string) $conn->errno_code, "\n";
+			echo "error=", (string) $conn->error, "\n";
+			$conn->close();
+			return;
+		}
+
+		if ($result === true) {
+			echo "query_state=true\n";
+			$conn->close();
+			echo "stage=close_done\n";
+			return;
+		}
+
+		echo "query_state=result\n";
+		echo "stage=fetch_begin\n";
+		$row = $result->fetch_assoc();
+		echo "stage=fetch_done\n";
+		if ($row === null) {
+			echo "first_row=null\n";
+		} else {
+			echo "first_row=present\n";
+		}
+
+		echo "stage=close_begin\n";
+		$conn->close();
+		echo "stage=close_done\n";
+	}
+}
+
+\om3\tools\mysqli_runtime_probe\main::run();

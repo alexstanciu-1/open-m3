@@ -1,0 +1,13 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class mysql_connection_config
+{
+	public ?string $host = null;
+	public ?string $username = null;
+	public ?string $password = null;
+	public ?string $database_name = null;
+	public int $port = 3306;
+	public ?string $socket = null;
+	public ?string $connection_charset = null;
+}

@@ -117,11 +117,11 @@ class structure_builder
 					}
 
 					if ($planning_property->struct_ref !== null) {
-						$this->ensure_ref_column($table, $property_key);
+						$this->ensure_ref_column($table, $property_key, $planning_property);
 						continue;
 					}
 
-					$this->ensure_scalar_column($table, $property_key, $planning_property->type_name, $planning_property->required);
+					$this->ensure_scalar_column($table, $property_key, $planning_property->type_name, $planning_property->required, null, $planning_property);
 				}
 			}
 
@@ -284,9 +284,6 @@ class structure_builder
 		$table = new db_table();
 		$table->name = $table_name;
 		$table->parent_database = $db;
-		$table->engine = "innodb";
-		$table->charset = "utf8";
-		$table->collation = "utf8_unicode_ci";
 		$db->tables[$table_name] = $table;
 		return $table;
 	}
@@ -338,7 +335,7 @@ class structure_builder
 		$table->indexes[$column_name] = $index;
 	}
 
-	private function ensure_ref_column(db_table $table, string $property_name): void
+	private function ensure_ref_column(db_table $table, string $property_name, ?\om3\base\schema\model_property $property = null): void
 	{
 		$column_name = $this->normalize_name($property_name) . "_id";
 		if (isset($table->columns[$column_name])) {
@@ -358,9 +355,22 @@ class structure_builder
 		$index->kind = "normal";
 		$index->columns[] = $column_name;
 		$table->indexes[$column_name] = $index;
+		$storage ?\om3\base\schema\storage_property = null;
+		if ($property !== null) {
+			$storage = $property->attached_storage;
+		}
+		$this->apply_storage_property_to_column($column, $storage, false);
+		$this->ensure_storage_index_for_column($table, $column_name, $storage);
 	}
 
-	private function ensure_named_ref_column(db_table $table, string $column_name, bool $required): void
+	private function ensure_named_ref_column(
+		db_table $table,
+		string $column_name,
+		bool $required,
+		?\om3\base\schema\storage_property $storage = null,
+		?bool $legacy_storage_nullable = null,
+		mixed $legacy_storage_default = null
+	): void
 	{
 		if (isset($table->columns[$column_name])) {
 			return;
@@ -372,6 +382,13 @@ class structure_builder
 		$column->type = "int";
 		$column->unsigned = true;
 		$column->is_nullable = !$required;
+		$this->apply_storage_property_to_column($column, $storage, $required);
+		if ($legacy_storage_nullable !== null) {
+			$column->is_nullable = (bool) $legacy_storage_nullable;
+		}
+		if ($legacy_storage_default !== null) {
+			$column->default_value = $this->normalize_storage_default_value($legacy_storage_default);
+		}
 		$table->columns[$column_name] = $column;
 
 		$index = new db_index();
@@ -380,6 +397,7 @@ class structure_builder
 		$index->kind = "normal";
 		$index->columns[] = $column_name;
 		$table->indexes[$column_name] = $index;
+		$this->ensure_storage_index_for_column($table, $column_name, $storage);
 	}
 
 	private function ensure_type_column(db_table $table, string $column_name): void
@@ -396,7 +414,16 @@ class structure_builder
 		$table->columns[$column_name] = $column;
 	}
 
-	private function ensure_scalar_column(db_table $table, string $property_name, string $type_name, bool $required, ?string $sql_type = null): void
+	private function ensure_scalar_column(
+		db_table $table,
+		string $property_name,
+		string $type_name,
+		bool $required,
+		?string $sql_type = null,
+		?\om3\base\schema\model_property $property = null,
+		?bool $legacy_storage_nullable = null,
+		mixed $legacy_storage_default = null
+	): void
 	{
 		$column_name = $this->legacy_full_support ? $this->normalize_legacy_db_name($property_name) : $this->normalize_name($property_name);
 		$column_name_lower = strtolower($column_name);
@@ -410,15 +437,153 @@ class structure_builder
 		$column = new db_column();
 		$column->parent_table = $table;
 		$column->name = $column_name;
-		$mapped_type_source string = $type_name;
-		if ($sql_type !== null) {
-			if ($sql_type !== "") {
-				$mapped_type_source = (string) $sql_type;
-			}
-		}
-		$column->type = $this->map_scalar_type($mapped_type_source);
 		$column->is_nullable = !$required;
 		$table->columns[$column_name] = $column;
+		$storage ?\om3\base\schema\storage_property = null;
+		if ($property !== null) {
+			$storage = $property->attached_storage;
+		}
+		$mapped_type_source string = $type_name;
+		if ($sql_type !== null && $sql_type !== "") {
+			$mapped_type_source = (string) $sql_type;
+		}
+		$this->apply_type_spec_to_column($column, $mapped_type_source);
+		$this->apply_storage_property_to_column($column, $storage, $required);
+		if ($legacy_storage_nullable !== null) {
+			$column->is_nullable = (bool) $legacy_storage_nullable;
+		}
+		if ($legacy_storage_default !== null) {
+			$column->default_value = $this->normalize_storage_default_value($legacy_storage_default);
+		}
+		$this->ensure_storage_index_for_column($table, $column_name, $storage);
+	}
+
+	private function apply_storage_property_to_column(
+		db_column $column,
+		?\om3\base\schema\storage_property $storage,
+		bool $required
+	): void
+	{
+		if ($storage === null) {
+			return;
+		}
+		if ($storage->sql_type !== null && $storage->sql_type !== "") {
+			$this->apply_type_spec_to_column($column, $storage->sql_type);
+		}
+		if ($storage->is_nullable !== null) {
+			$column->is_nullable = (bool) $storage->is_nullable;
+		} else {
+			$column->is_nullable = !$required;
+		}
+		if ($storage->default !== null) {
+			$column->default_value = $this->normalize_storage_default_value($storage->default);
+		}
+	}
+
+	private function apply_type_spec_to_column(db_column $column, string $type_name): void
+	{
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			$column->type = "varchar";
+			$column->length = null;
+			$column->values = null;
+			$column->value_list = null;
+			return;
+		}
+
+		$raw = trim($type_name);
+		$unsigned_pos = strpos(strtolower($raw), " unsigned");
+		if ($unsigned_pos !== false) {
+			$column->unsigned = true;
+			$raw = trim(substr($raw, 0, $unsigned_pos));
+		}
+
+		$paren_pos = strpos($raw, "(");
+		if ($paren_pos === false) {
+			$column->type = $this->map_scalar_type($raw);
+			$column->length = null;
+			$column->values = null;
+			$column->value_list = null;
+			return;
+		}
+
+		$end_paren = strrpos($raw, ")");
+		if ($end_paren === false || $end_paren <= $paren_pos) {
+			$column->type = $this->map_scalar_type($raw);
+			$column->length = null;
+			$column->values = null;
+			$column->value_list = null;
+			return;
+		}
+
+		$type_base = strtolower(trim(substr($raw, 0, $paren_pos)));
+		$type_inner = trim(substr($raw, $paren_pos + 1, $end_paren - $paren_pos - 1));
+		$column->type = $this->map_scalar_type($type_base);
+		if ($type_base == "enum" || $type_base == "set") {
+			$column->values = $type_inner;
+			$column->value_list = $this->parse_column_value_list($type_base, $type_inner);
+			$column->length = null;
+			return;
+		}
+		$column->length = $type_inner;
+		$column->values = null;
+		$column->value_list = null;
+	}
+
+	private function parse_column_value_list(string $kind, string $raw_values): column_value_list
+	{
+		$list = new column_value_list();
+		$list->kind = strtolower(trim($kind));
+
+		$length = strlen($raw_values);
+		$current = "";
+		$in_quote = false;
+		for ($i = 0; $i < $length; $i++) {
+			$ch = substr($raw_values, $i, 1);
+			if ($ch == "'") {
+				if ($in_quote && ($i + 1 < $length) && substr($raw_values, $i + 1, 1) == "'") {
+					$current = $current . "'";
+					$i++;
+					continue;
+				}
+				$in_quote = !$in_quote;
+				continue;
+			}
+			if (!$in_quote && $ch == ",") {
+				$list->items[] = trim($current);
+				$current = "";
+				continue;
+			}
+			$current = $current . $ch;
+		}
+		if ($current !== "" || $length > 0) {
+			$list->items[] = trim($current);
+		}
+		return $list;
+	}
+
+	private function normalize_storage_default_value(mixed $raw_default): mixed
+	{
+		if ($raw_default === null) {
+			return null;
+		}
+		$default_text = trim((string) $raw_default);
+		if ($default_text === "") {
+			return "";
+		}
+		$upper = strtoupper($default_text);
+		if ($upper == "CURRENT_TIMESTAMP" || $upper == "CURRENT_TIMESTAMP()") {
+			return "CURRENT_TIMESTAMP";
+		}
+		$len = strlen($default_text);
+		if ($len >= 2) {
+			$first = substr($default_text, 0, 1);
+			$last = substr($default_text, $len - 1, 1);
+			if (($first == "'" && $last == "'") || ($first == "\"" && $last == "\"")) {
+				return substr($default_text, 1, $len - 2);
+			}
+		}
+		return $default_text;
 	}
 
 	private function inline_sub_columns(db_table $table, string $property_name, \om3\base\schema\model $child_model): void
@@ -432,11 +597,86 @@ class structure_builder
 				continue;
 			}
 			if ($child_property->struct_ref !== null) {
-				$this->ensure_ref_column($table, $property_name . "_" . $child_key);
+				$this->ensure_ref_column($table, $property_name . "_" . $child_key, $child_property);
 				continue;
 			}
-			$this->ensure_scalar_column($table, $property_name . "_" . $child_key, $child_property->type_name, $child_property->required);
+			$this->ensure_scalar_column($table, $property_name . "_" . $child_key, $child_property->type_name, $child_property->required, null, $child_property);
 		}
+	}
+
+	private function ensure_storage_index_for_column(
+		db_table $table,
+		string $column_name,
+		?\om3\base\schema\storage_property $storage
+	): void
+	{
+		if ($storage === null) {
+			return;
+		}
+		if ($storage->index === null) {
+			return;
+		}
+
+		$index_kind = $this->normalize_storage_index_kind($storage->index);
+		$this->ensure_raw_index_kind_for_column($table, $column_name, $index_kind);
+	}
+
+	private function ensure_storage_index_value_for_column(db_table $table, string $column_name, mixed $raw_index): void
+	{
+		$index_kind = $this->normalize_storage_index_kind($raw_index);
+		$this->ensure_raw_index_kind_for_column($table, $column_name, $index_kind);
+	}
+
+	private function ensure_raw_index_kind_for_column(db_table $table, string $column_name, ?string $index_kind): void
+	{
+		if ($index_kind === null) {
+			return;
+		}
+		if ($index_kind == "normal" && isset($table->indexes[$column_name])) {
+			return;
+		}
+		if ($index_kind == "primary") {
+			$table->indexes["primary"] = $this->make_single_column_index($table, "primary", "primary", $column_name);
+			return;
+		}
+		$table->indexes[$column_name] = $this->make_single_column_index($table, $column_name, $index_kind, $column_name);
+	}
+
+	private function normalize_storage_index_kind(mixed $raw_index): ?string
+	{
+		if ($raw_index === null) {
+			return null;
+		}
+		if ($raw_index === true) {
+			return "normal";
+		}
+		$index_text = trim(strtolower((string) $raw_index));
+		if ($index_text === "" || $index_text == "false" || $index_text == "0" || $index_text == "none") {
+			return null;
+		}
+		if ($index_text == "1" || $index_text == "true" || $index_text == "index" || $index_text == "normal" || $index_text == "key") {
+			return "normal";
+		}
+		if ($index_text == "unique" || $index_text == "uniq") {
+			return "normal";
+		}
+		if ($index_text == "primary") {
+			return "primary";
+		}
+		if ($index_text == "fulltext") {
+			return "fulltext";
+		}
+		return null;
+	}
+
+	private function make_single_column_index(db_table $table, string $index_name, string $index_kind, string $column_name): db_index
+	{
+		$index = new db_index();
+		$index->parent_table = $table;
+		$index->name = $index_name;
+		$index->kind = $index_kind;
+		$index->columns[] = $column_name;
+		return $index;
 	}
 
 	private function resolve_sub_materialization(
@@ -505,7 +745,7 @@ class structure_builder
 		}
 		$paren_pos = strpos($type_key, "(");
 		$type_base = ($paren_pos === false) ? $type_key : substr($type_key, 0, $paren_pos);
-		if ($type_base === "enum" || $type_base === "set" || $type_base === "varchar" || $type_base === "char" || $type_base === "text" || $type_base === "mediumtext" || $type_base === "longtext" || $type_base === "datetime" || $type_base === "date" || $type_base === "time" || $type_base === "float" || $type_base === "double" || $type_base === "decimal" || $type_base === "numeric" || $type_base === "smallint" || $type_base === "bigint" || $type_base === "tinyint") {
+		if ($type_base === "enum" || $type_base === "set" || $type_base === "varchar" || $type_base === "char" || $type_base === "text" || $type_base === "mediumtext" || $type_base === "longtext" || $type_base === "datetime" || $type_base === "timestamp" || $type_base === "date" || $type_base === "time" || $type_base === "float" || $type_base === "double" || $type_base === "decimal" || $type_base === "numeric" || $type_base === "smallint" || $type_base === "bigint" || $type_base === "tinyint") {
 			if ($this->legacy_full_support && $type_base === "double") {
 				return "float";
 			}
@@ -522,6 +762,9 @@ class structure_builder
 		}
 		if ($type_key == "datetime") {
 			return "datetime";
+		}
+		if ($type_key == "timestamp") {
+			return "timestamp";
 		}
 		if ($type_key == "date") {
 			return "date";
@@ -657,20 +900,24 @@ class structure_builder
 				$link_table = $this->ensure_table($db, $link_table_name);
 				$this->ensure_id_column($link_table);
 				if ($mat->owner_column !== null && $mat->owner_column !== "") {
-					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->owner_column), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->owner_column), false);
 				} else if ($mat->link_left !== null && $mat->link_left !== "") {
-					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->link_left), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->link_left), false);
 				} else if ($uses_synthetic_helper && $parent_table_name !== null) {
 					$this->ensure_named_ref_column($link_table, $this->legacy_collection_parent_ref_name($parent_table_name), false);
 				} else {
-					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $this->resolve_owner_property_name($root_table_name, $node)), true);
+					$this->ensure_named_ref_column($link_table, $this->legacy_owner_column_name($root_table_name, $this->resolve_owner_property_name($root_table_name, $node)), false);
 				}
 				if ($uses_synthetic_helper && $mat->id_column !== null && $mat->id_column !== "") {
 					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name("$" . $node->name), false);
 				} else if ($mat->id_column !== null && $mat->id_column !== "") {
-					$this->ensure_named_ref_column($link_table, $this->legacy_ref_role_column_name($mat->id_column), false);
+					$id_column_name = $this->legacy_ref_role_column_name($mat->id_column);
+					$this->ensure_named_ref_column($link_table, $id_column_name, false, null, $mat->storage_nullable, $mat->storage_default);
+					$this->ensure_storage_index_value_for_column($link_table, $id_column_name, $mat->storage_index);
 				} else if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($link_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
+					$value_column_name = $this->normalize_legacy_column_name($mat->value_column);
+					$this->ensure_scalar_column($link_table, $value_column_name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+					$this->ensure_storage_index_value_for_column($link_table, $value_column_name, $mat->storage_index);
 				}
 				if ($mat->type_column !== null && $mat->type_column !== "") {
 					$this->ensure_type_column($link_table, $this->normalize_legacy_column_name($mat->type_column));
@@ -707,9 +954,15 @@ class structure_builder
 				if ($mode === "ref_column") {
 					$this->ensure_named_ref_column($helper_table, $this->legacy_ref_role_column_name("$" . $node->name), false);
 				} else if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($helper_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
+					$value_column_name = $this->normalize_legacy_column_name($mat->value_column);
+					$this->ensure_scalar_column($helper_table, $value_column_name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+					$this->ensure_storage_index_value_for_column($helper_table, $value_column_name, $mat->storage_index);
 				} else {
-					$this->ensure_scalar_column($helper_table, $node->name, "string", false, $mat->scalar_sql_type);
+					$this->ensure_scalar_column($helper_table, $node->name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+					if ($node->name !== null) {
+						$node_name string = $node->name;
+						$this->ensure_storage_index_value_for_column($helper_table, $node_name, $mat->storage_index);
+					}
 				}
 				if ($mat->type_column !== null && $mat->type_column !== "") {
 					$this->ensure_type_column($helper_table, $this->normalize_legacy_column_name($mat->type_column));
@@ -747,7 +1000,9 @@ class structure_builder
 
 			if ($mode === "ref_column") {
 				if ($mat->id_column !== null && $mat->id_column !== "") {
-					$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->id_column), false);
+					$id_column_name = $this->legacy_ref_role_column_name($mat->id_column);
+					$this->ensure_named_ref_column($target_table, $id_column_name, false, null, $mat->storage_nullable, $mat->storage_default);
+					$this->ensure_storage_index_value_for_column($target_table, $id_column_name, $mat->storage_index);
 				} else {
 					$this->ensure_ref_column($target_table, $node->name);
 				}
@@ -759,18 +1014,30 @@ class structure_builder
 
 			if ($mode === "value_column") {
 				if ($mat->value_column !== null && $mat->value_column !== "") {
-					$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
+					$value_column_name = $this->normalize_legacy_column_name($mat->value_column);
+					$this->ensure_scalar_column($target_table, $value_column_name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+					$this->ensure_storage_index_value_for_column($target_table, $value_column_name, $mat->storage_index);
 				} else {
-					$this->ensure_scalar_column($target_table, $node->name, "string", false, $mat->scalar_sql_type);
+					$this->ensure_scalar_column($target_table, $node->name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+					if ($node->name !== null) {
+						$node_name string = $node->name;
+						$this->ensure_storage_index_value_for_column($target_table, $node_name, $mat->storage_index);
+					}
 				}
 				continue;
 			}
 
 			if ($mat->id_column !== null && $mat->id_column !== "") {
-				$this->ensure_named_ref_column($target_table, $this->legacy_ref_role_column_name($mat->id_column), false);
+				$id_column_name = $this->legacy_ref_role_column_name($mat->id_column);
+				$this->ensure_named_ref_column($target_table, $id_column_name, false, null, $mat->storage_nullable, $mat->storage_default);
+				if (isset($target_table->columns[$id_column_name])) {
+					$this->ensure_storage_index_value_for_column($target_table, $id_column_name, $mat->storage_index);
+				}
 			}
 			if ($mat->value_column !== null && $mat->value_column !== "") {
-				$this->ensure_scalar_column($target_table, $this->normalize_legacy_column_name($mat->value_column), "string", false, $mat->scalar_sql_type);
+				$value_column_name = $this->normalize_legacy_column_name($mat->value_column);
+				$this->ensure_scalar_column($target_table, $value_column_name, "string", false, $mat->scalar_sql_type, null, $mat->storage_nullable, $mat->storage_default);
+				$this->ensure_storage_index_value_for_column($target_table, $value_column_name, $mat->storage_index);
 			}
 			if ($mat->type_column !== null && $mat->type_column !== "") {
 				$this->ensure_type_column($target_table, $this->normalize_legacy_column_name($mat->type_column));

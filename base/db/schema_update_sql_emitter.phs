@@ -1,0 +1,172 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class schema_update_sql_emitter extends mysql_sql_emitter
+{
+	public function build_sql_preview(schema_update_plan $plan): void
+	{
+		foreach ($plan->executable_operations as $operation) {
+			$operation->sql_preview = $this->emit_operation_statements($operation);
+		}
+
+		foreach ($plan->proposal_operations as $operation) {
+			$operation->sql_preview = $this->emit_operation_statements($operation);
+		}
+	}
+
+	public function emit_plan(schema_update_plan $plan): string
+	{
+		$this->build_sql_preview($plan);
+
+		$lines vector<string> = [];
+		$lines[] = "-- executable";
+		foreach ($plan->executable_operations as $operation) {
+			foreach ($operation->sql_preview as $statement) {
+				$lines[] = $statement;
+			}
+		}
+
+		$lines[] = "";
+		$lines[] = "-- proposal_only";
+		foreach ($plan->proposal_operations as $operation) {
+			foreach ($operation->sql_preview as $statement) {
+				$lines[] = $statement;
+			}
+		}
+
+		return implode("\n", $lines) . "\n";
+	}
+
+	public function emit_operation_statements(schema_update_operation $operation): vector<string>
+	{
+		$statements vector<string> = [];
+		$kind = strtolower(trim($operation->kind ?? ""));
+		if ($kind === "") {
+			return $statements;
+		}
+
+		if ($kind == "create_table") {
+			if ($operation->desired_table !== null) {
+				$statements[] = $this->emit_create_table($operation->desired_table);
+			}
+			return $statements;
+		}
+
+		$table_name = (string) ($operation->table_name ?? "");
+		if ($table_name === "") {
+			$statements[] = "/* missing_table_name_for_" . $kind . " */";
+			return $statements;
+		}
+
+		if ($kind == "update_table_options") {
+			$table = (($operation->desired_table !== null) ? $operation->desired_table : $operation->current_table);
+			if ($table === null) {
+				$statements[] = "/* missing_table_for_update_table_options */";
+				return $statements;
+			}
+			$options = $this->emit_table_option_assignments($table);
+			if ($options === "") {
+				return $statements;
+			}
+			$statements[] = "ALTER TABLE " . $this->quote_identifier($table_name) . " " . $options . ";";
+			return $statements;
+		}
+
+		if ($kind == "add_column") {
+			if ($operation->desired_column === null) {
+				$statements[] = "/* missing_desired_column_for_add_column */";
+				return $statements;
+			}
+			$statements[] = "ALTER TABLE " . $this->quote_identifier($table_name) . " ADD COLUMN " . $this->emit_column_definition($operation->desired_column) . ";";
+			return $statements;
+		}
+
+		if ($kind == "modify_column") {
+			if ($operation->desired_column === null) {
+				$statements[] = "/* missing_desired_column_for_modify_column */";
+				return $statements;
+			}
+			if ($operation->safety == "proposal_only") {
+				$statements[] = "/* PROPOSAL ONLY: ALTER TABLE " . $this->quote_identifier($table_name) . " MODIFY COLUMN " . $this->emit_column_definition($operation->desired_column) . "; */";
+				return $statements;
+			}
+			$statements[] = "ALTER TABLE " . $this->quote_identifier($table_name) . " MODIFY COLUMN " . $this->emit_column_definition($operation->desired_column) . ";";
+			return $statements;
+		}
+
+		if ($kind == "add_index") {
+			if ($operation->desired_index === null) {
+				$statements[] = "/* missing_desired_index_for_add_index */";
+				return $statements;
+			}
+			$statements[] = "ALTER TABLE " . $this->quote_identifier($table_name) . " ADD " . $this->emit_index_definition($operation->desired_index) . ";";
+			return $statements;
+		}
+
+		if ($kind == "modify_index") {
+			$drop_sql = $this->emit_drop_index_statement($table_name, $operation->current_index, $operation->index_name);
+			if ($drop_sql !== null) {
+				$statements[] = $drop_sql;
+			}
+			if ($operation->desired_index !== null) {
+				$statements[] = "ALTER TABLE " . $this->quote_identifier($table_name) . " ADD " . $this->emit_index_definition($operation->desired_index) . ";";
+			} else {
+				$statements[] = "/* missing_desired_index_for_modify_index */";
+			}
+			return $statements;
+		}
+
+		if ($kind == "drop_index") {
+			$drop_sql = $this->emit_drop_index_statement($table_name, $operation->current_index, $operation->index_name);
+			if ($drop_sql !== null) {
+				$statements[] = $drop_sql;
+			}
+			return $statements;
+		}
+
+		if ($kind == "drop_column_proposal") {
+			$column_name = (string) ($operation->column_name ?? "");
+			$statements[] = "/* PROPOSAL ONLY: ALTER TABLE " . $this->quote_identifier($table_name) . " DROP COLUMN " . $this->quote_identifier($column_name) . "; */";
+			return $statements;
+		}
+
+		if ($kind == "drop_table_proposal") {
+			$statements[] = "/* PROPOSAL ONLY: DROP TABLE " . $this->quote_identifier($table_name) . "; */";
+			return $statements;
+		}
+
+		$statements[] = "/* unsupported_operation_kind:" . $kind . " */";
+		return $statements;
+	}
+
+	protected function emit_table_option_assignments(db_table $table): string
+	{
+		$options vector<string> = [];
+		if ($table->engine !== null && $table->engine !== "" && $this->dialect !== null && $this->dialect->supports_engine) {
+			$options[] = "ENGINE=" . strtoupper($table->engine);
+		}
+		if ($table->charset !== null && $table->charset !== "" && $this->dialect !== null && $this->dialect->supports_charset) {
+			$options[] = "DEFAULT CHARSET=" . $table->charset;
+		}
+		if ($table->collation !== null && $table->collation !== "" && $this->dialect !== null && $this->dialect->supports_collation) {
+			$options[] = "COLLATE=" . $table->collation;
+		}
+		if ($table->comment !== null && $table->comment !== "" && $this->dialect !== null && $this->dialect->supports_table_comment) {
+			$options[] = "COMMENT=" . $this->quote_string_literal($table->comment);
+		}
+		return implode(" ", $options);
+	}
+
+	protected function emit_drop_index_statement(string $table_name, ?db_index $current_index, ?string $index_name): ?string
+	{
+		$resolved_name = (string) (($index_name !== null && $index_name !== "") ? $index_name : ($current_index->name ?? ""));
+		$kind = strtolower(trim(($current_index !== null) ? ((string) ($current_index->kind ?? "")) : ""));
+		if ($kind == "primary" || strtoupper($resolved_name) == "PRIMARY" || strtolower($resolved_name) == "primary") {
+			return "ALTER TABLE " . $this->quote_identifier($table_name) . " DROP PRIMARY KEY;";
+		}
+		if ($resolved_name === "") {
+			return null;
+		}
+		return "ALTER TABLE " . $this->quote_identifier($table_name) . " DROP INDEX " . $this->quote_identifier($resolved_name) . ";";
+	}
+}

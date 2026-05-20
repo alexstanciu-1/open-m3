@@ -1,0 +1,21 @@
+namespace om3\tools\strtolower_guard_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$column_name = "PostCode";
+
+		echo "start\n";
+		echo "lower=", strtolower($column_name), "\n";
+		echo "guard:start\n";
+		if (strtolower($column_name) == "id" || strtolower($column_name) == "\$id") {
+			echo "guard:true\n";
+		} else {
+			echo "guard:false\n";
+		}
+		echo "done\n";
+	}
+}
+
+\om3\tools\strtolower_guard_repro\main::run();

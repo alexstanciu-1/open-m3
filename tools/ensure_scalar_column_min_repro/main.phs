@@ -1,0 +1,93 @@
+namespace om3\tools\ensure_scalar_column_min_repro;
+
+class fake_table
+{
+	public ?string $name = null;
+	public $columns hash<fake_column> = [];
+}
+
+class fake_column
+{
+	public ?fake_table $parent_table = null;
+	public ?string $name = null;
+	public ?string $type = null;
+	public bool $is_nullable = true;
+}
+
+class demo_builder
+{
+	public bool $legacy_full_support = true;
+
+	public function run_case(fake_table $table, string $property_name, string $type_name, bool $required, ?string $sql_type = null): void
+	{
+		$column_name = $this->legacy_full_support ? $this->normalize_legacy_db_name_local($property_name) : strtolower($property_name);
+		$column_name_lower = strtolower($column_name);
+		if ($this->legacy_full_support && ($column_name_lower == "id" || $column_name_lower == "\$id")) {
+			return;
+		}
+		if (isset($table->columns[$column_name])) {
+			return;
+		}
+
+		$column = new fake_column();
+		$column->parent_table = $table;
+		$column->name = $column_name;
+
+		$mapped_type_source string = $type_name;
+		if ($sql_type !== null) {
+			if ($sql_type !== "") {
+				$mapped_type_source = (string) $sql_type;
+			}
+		}
+
+		$column->type = $this->map_scalar_type_like($mapped_type_source);
+		$column->is_nullable = !$required;
+		$table->columns[$column_name] = $column;
+	}
+
+	private function map_scalar_type_like(string $type_name): string
+	{
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			return "varchar";
+		}
+		return $type_key;
+	}
+
+	private function normalize_legacy_db_name_local(string $name): string
+	{
+		$out = trim($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		$out = str_replace("$", "", $out);
+		while (true) {
+			$collapsed = str_replace("__", "_", $out);
+			if ($collapsed === $out) {
+				break;
+			}
+			$out = $collapsed;
+		}
+		if (str_starts_with($out, "_")) {
+			$out = substr($out, 1);
+		}
+		return $out;
+	}
+}
+
+class main
+{
+	public static function run(): void
+	{
+		$table = new fake_table();
+		$table->name = "Addresses";
+		$builder = new demo_builder();
+		echo "start\n";
+		$builder->run_case($table, "PostCode", "string", false, null);
+		echo "count=", count($table->columns), "\n";
+		echo "done\n";
+	}
+}
+
+\om3\tools\ensure_scalar_column_min_repro\main::run();

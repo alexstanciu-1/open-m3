@@ -1,0 +1,24 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class schema_update_operation
+{
+	public ?string $kind = null;
+	public ?string $safety = null;
+	public ?string $database_name = null;
+	public ?string $table_name = null;
+	public ?string $column_name = null;
+	public ?string $index_name = null;
+	public ?string $reference_name = null;
+	public ?string $summary = null;
+	public ?string $reason = null;
+	public ?db_table $current_table = null;
+	public ?db_table $desired_table = null;
+	public ?db_column $current_column = null;
+	public ?db_column $desired_column = null;
+	public ?db_index $current_index = null;
+	public ?db_index $desired_index = null;
+	public ?db_reference $current_reference = null;
+	public ?db_reference $desired_reference = null;
+	public $sql_preview vector<string> = [];
+}

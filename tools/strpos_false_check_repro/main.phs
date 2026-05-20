@@ -1,0 +1,30 @@
+namespace om3\tools\strpos_false_check_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$out = "Address";
+
+		echo "check:start\n";
+		$pos = strpos($out, "__");
+		echo "check:computed\n";
+		echo "check:is_false=", (($pos === false) ? "yes" : "no"), "\n";
+		echo "check:not_false=", (($pos !== false) ? "yes" : "no"), "\n";
+
+		echo "while:start\n";
+		$iterations = 0;
+		while (strpos($out, "__") !== false) {
+			$iterations = $iterations + 1;
+			if ($iterations > 5) {
+				echo "while:too_many\n";
+				break;
+			}
+			$out = str_replace("__", "_", $out);
+			echo "while:iter=", $iterations, ":out=", $out, "\n";
+		}
+		echo "while:done:", $iterations, "\n";
+	}
+}
+
+\om3\tools\strpos_false_check_repro\main::run();

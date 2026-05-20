@@ -1,0 +1,8 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class column_value_list
+{
+	public ?string $kind = null;
+	public $items vector<string> = [];
+}

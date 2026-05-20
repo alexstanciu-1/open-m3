@@ -8,6 +8,7 @@ class db_column
 	public ?string $type = null;
 	public ?string $length = null;
 	public ?string $values = null;
+	public ?column_value_list $value_list = null;
 	public mixed $default_value = null;
 	public ?string $charset = null;
 	public ?string $collation = null;

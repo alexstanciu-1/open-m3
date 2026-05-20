@@ -21,13 +21,20 @@ class main
 		$db = $db_builder->begin_legacy_orm_database();
 		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
 		$root_key = self::normalize_legacy_type_name_local($root_class);
+		$normalized_root_key ?string = null;
+		if ($root_key !== null) {
+			$normalized_root_key = (string) $root_key;
+		}
 
 		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
 			$type_name = $all_types->items[$type_index];
-			if ($root_key !== null && $type_name == $root_key) {
-				continue;
+			if ($normalized_root_key !== null) {
+				$root_key_text string = (string) $normalized_root_key;
+				if ($type_name == $root_key_text) {
+					continue;
+				}
 			}
-			$type_root = $assembler->build_legacy_orm_root($dir, $type_name);
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
 			if ($type_root === null) {
 				continue;
 			}
@@ -57,7 +64,8 @@ class main
 		if ($type_name === null) {
 			return null;
 		}
-		$trimmed = trim($type_name);
+		$type_text string = (string) $type_name;
+		$trimmed = trim($type_text);
 		if ($trimmed === "") {
 			return null;
 		}
@@ -67,6 +75,7 @@ class main
 		}
 		return $trimmed;
 	}
+
 }
 
 \om3\tools\schema_diff_report\main::run();

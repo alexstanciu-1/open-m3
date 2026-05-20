@@ -1,0 +1,246 @@
+namespace om3\tools\schema_diff_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$current = self::build_current_schema();
+		$desired = self::build_desired_schema();
+
+		$differ = new \om3\base\db\schema_differ();
+		$plan = $differ->diff($current, $desired);
+		$sql_emitter = new \om3\base\db\schema_update_sql_emitter();
+		$sql_emitter->build_sql_preview($plan);
+
+		echo "current_tables=", (($plan->current !== null) ? count($plan->current->tables) : 0), "\n";
+		echo "desired_tables=", (($plan->desired !== null) ? count($plan->desired->tables) : 0), "\n";
+		echo "executable_ops=", count($plan->executable_operations), "\n";
+		echo "proposal_ops=", count($plan->proposal_operations), "\n";
+		echo "warnings=", count($plan->warnings), "\n";
+		echo "unsupported=", count($plan->unsupported_differences), "\n";
+
+		echo "--executable--\n";
+		for ($i = 0; $i < count($plan->executable_operations); $i++) {
+			self::print_operation($plan->executable_operations[$i]);
+		}
+
+		echo "--proposal--\n";
+		for ($i = 0; $i < count($plan->proposal_operations); $i++) {
+			self::print_operation($plan->proposal_operations[$i]);
+		}
+
+		if (count($plan->warnings) > 0) {
+			echo "--warnings--\n";
+			for ($i = 0; $i < count($plan->warnings); $i++) {
+				self::print_warning($plan->warnings[$i]);
+			}
+		}
+
+		if (count($plan->unsupported_differences) > 0) {
+			echo "--unsupported--\n";
+			for ($i = 0; $i < count($plan->unsupported_differences); $i++) {
+				self::print_warning($plan->unsupported_differences[$i]);
+			}
+		}
+
+		echo "--sql--\n";
+		echo $sql_emitter->emit_plan($plan);
+	}
+
+	private static function build_current_schema(): \om3\base\db\db_database
+	{
+		$db = new \om3\base\db\db_database();
+		$db->name = "demo";
+		$db->charset = "utf8";
+		$db->collation = "utf8_unicode_ci";
+
+		$users = new \om3\base\db\db_table();
+		$users->parent_database = $db;
+		$users->name = "Users";
+		$users->engine = "innodb";
+		$users->charset = "utf8";
+		$users->collation = "utf8_unicode_ci";
+		$users->comment = "legacy users";
+
+		$id = new \om3\base\db\db_column();
+		$id->parent_table = $users;
+		$id->name = '$id';
+		$id->type = "int";
+		$id->unsigned = true;
+		$id->is_nullable = false;
+		$id->auto_increment = true;
+		$users->columns[$id->name] = $id;
+
+		$name = new \om3\base\db\db_column();
+		$name->parent_table = $users;
+		$name->name = "Name";
+		$name->type = "varchar";
+		$name->length = "120";
+		$name->is_nullable = false;
+		$users->columns[$name->name] = $name;
+
+		$legacy = new \om3\base\db\db_column();
+		$legacy->parent_table = $users;
+		$legacy->name = "LegacyCode";
+		$legacy->type = "varchar";
+		$legacy->length = "32";
+		$legacy->is_nullable = true;
+		$users->columns[$legacy->name] = $legacy;
+
+		$code = new \om3\base\db\db_column();
+		$code->parent_table = $users;
+		$code->name = "Code";
+		$code->type = "varchar";
+		$code->length = "64";
+		$code->is_nullable = true;
+		$users->columns[$code->name] = $code;
+
+		$primary = new \om3\base\db\db_index();
+		$primary->parent_table = $users;
+		$primary->name = "primary";
+		$primary->kind = "primary";
+		$primary->columns[] = '$id';
+		$users->indexes[$primary->name] = $primary;
+
+		$name_index = new \om3\base\db\db_index();
+		$name_index->parent_table = $users;
+		$name_index->name = "Name";
+		$name_index->kind = "normal";
+		$name_index->columns[] = "Name";
+		$users->indexes[$name_index->name] = $name_index;
+
+		$db->tables[$users->name] = $users;
+
+		$old_logs = new \om3\base\db\db_table();
+		$old_logs->parent_database = $db;
+		$old_logs->name = "OldLogs";
+		$old_logs->engine = "innodb";
+		$old_logs->charset = "utf8";
+		$old_logs->collation = "utf8_unicode_ci";
+		$db->tables[$old_logs->name] = $old_logs;
+
+		return $db;
+	}
+
+	private static function build_desired_schema(): \om3\base\db\db_database
+	{
+		$db = new \om3\base\db\db_database();
+		$db->name = "demo";
+		$db->charset = "utf8mb4";
+		$db->collation = "utf8mb4_0900_ai_ci";
+
+		$users = new \om3\base\db\db_table();
+		$users->parent_database = $db;
+		$users->name = "Users";
+		$users->engine = "innodb";
+		$users->charset = "utf8mb4";
+		$users->collation = "utf8mb4_0900_ai_ci";
+		$users->comment = "openm3 users";
+
+		$id = new \om3\base\db\db_column();
+		$id->parent_table = $users;
+		$id->name = '$id';
+		$id->type = "int";
+		$id->unsigned = true;
+		$id->is_nullable = false;
+		$id->auto_increment = true;
+		$users->columns[$id->name] = $id;
+
+		$name = new \om3\base\db\db_column();
+		$name->parent_table = $users;
+		$name->name = "Name";
+		$name->type = "varchar";
+		$name->length = "255";
+		$name->is_nullable = false;
+		$name->comment = "display name";
+		$users->columns[$name->name] = $name;
+
+		$email = new \om3\base\db\db_column();
+		$email->parent_table = $users;
+		$email->name = "Email";
+		$email->type = "varchar";
+		$email->length = "255";
+		$email->is_nullable = true;
+		$users->columns[$email->name] = $email;
+
+		$code = new \om3\base\db\db_column();
+		$code->parent_table = $users;
+		$code->name = "Code";
+		$code->type = "varchar";
+		$code->length = "16";
+		$code->is_nullable = false;
+		$users->columns[$code->name] = $code;
+
+		$primary = new \om3\base\db\db_index();
+		$primary->parent_table = $users;
+		$primary->name = "primary";
+		$primary->kind = "primary";
+		$primary->columns[] = '$id';
+		$users->indexes[$primary->name] = $primary;
+
+		$email_index = new \om3\base\db\db_index();
+		$email_index->parent_table = $users;
+		$email_index->name = "Email";
+		$email_index->kind = "unique";
+		$email_index->columns[] = "Email";
+		$users->indexes[$email_index->name] = $email_index;
+
+		$db->tables[$users->name] = $users;
+
+		$profiles = new \om3\base\db\db_table();
+		$profiles->parent_database = $db;
+		$profiles->name = "Profiles";
+		$profiles->engine = "innodb";
+		$profiles->charset = "utf8mb4";
+		$profiles->collation = "utf8mb4_0900_ai_ci";
+
+		$profile_id = new \om3\base\db\db_column();
+		$profile_id->parent_table = $profiles;
+		$profile_id->name = '$id';
+		$profile_id->type = "int";
+		$profile_id->unsigned = true;
+		$profile_id->is_nullable = false;
+		$profile_id->auto_increment = true;
+		$profiles->columns[$profile_id->name] = $profile_id;
+
+		$bio = new \om3\base\db\db_column();
+		$bio->parent_table = $profiles;
+		$bio->name = "Bio";
+		$bio->type = "text";
+		$bio->is_nullable = true;
+		$profiles->columns[$bio->name] = $bio;
+
+		$profiles_primary = new \om3\base\db\db_index();
+		$profiles_primary->parent_table = $profiles;
+		$profiles_primary->name = "primary";
+		$profiles_primary->kind = "primary";
+		$profiles_primary->columns[] = '$id';
+		$profiles->indexes[$profiles_primary->name] = $profiles_primary;
+
+		$db->tables[$profiles->name] = $profiles;
+
+		return $db;
+	}
+
+	private static function print_operation(\om3\base\db\schema_update_operation $operation): void
+	{
+		echo ($operation->kind ?? ""), "\t";
+		echo ($operation->safety ?? ""), "\t";
+		echo ($operation->table_name ?? ""), "\t";
+		echo ($operation->column_name ?? ""), "\t";
+		echo ($operation->index_name ?? ""), "\t";
+		echo ($operation->reason ?? ""), "\t";
+		echo ($operation->summary ?? ""), "\n";
+	}
+
+	private static function print_warning(\om3\base\db\schema_update_warning $warning): void
+	{
+		echo ($warning->code ?? ""), "\t";
+		echo ($warning->table_name ?? ""), "\t";
+		echo ($warning->column_name ?? ""), "\t";
+		echo ($warning->index_name ?? ""), "\t";
+		echo ($warning->message ?? ""), "\n";
+	}
+}
+
+\om3\tools\schema_diff_probe\main::run();

@@ -1,0 +1,195 @@
+namespace om3\tools\schema_live_update_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$argc = cli_argc();
+		$argv = cli_argv();
+
+		if ($argc < 5) {
+			echo "usage: <host> <user> <pass> <database> [port] [socket]\n";
+			return;
+		}
+
+		$current = self::read_current_schema();
+		if ($current === null) {
+			return;
+		}
+
+		$desired = self::build_desired_schema();
+		if ($desired === null) {
+			return;
+		}
+
+		\om3\base\db\h2b_compatibility_policy::apply_scope_exclusions($current);
+		\om3\base\db\h2b_compatibility_policy::apply_scope_exclusions($desired);
+
+		$differ = new \om3\base\db\schema_differ();
+		$plan = $differ->diff($current, $desired);
+		$sql_emitter = new \om3\base\db\schema_update_sql_emitter();
+		$sql_emitter->build_sql_preview($plan);
+
+		echo "database=", ($current->name ?? ""), "\n";
+		echo "current_tables=", count($current->tables), "\n";
+		echo "desired_tables=", count($desired->tables), "\n";
+		echo "executable_ops=", count($plan->executable_operations), "\n";
+		echo "proposal_ops=", count($plan->proposal_operations), "\n";
+		echo "warnings=", count($plan->warnings), "\n";
+		echo "unsupported=", count($plan->unsupported_differences), "\n";
+
+		echo "--executable--\n";
+		for ($i = 0; $i < count($plan->executable_operations); $i++) {
+			self::print_operation($plan->executable_operations[$i]);
+		}
+
+		echo "--proposal--\n";
+		for ($i = 0; $i < count($plan->proposal_operations); $i++) {
+			self::print_operation($plan->proposal_operations[$i]);
+		}
+
+		if (count($plan->warnings) > 0) {
+			echo "--warnings--\n";
+			for ($i = 0; $i < count($plan->warnings); $i++) {
+				self::print_warning($plan->warnings[$i]);
+			}
+		}
+
+		if (count($plan->unsupported_differences) > 0) {
+			echo "--unsupported--\n";
+			for ($i = 0; $i < count($plan->unsupported_differences); $i++) {
+				self::print_warning($plan->unsupported_differences[$i]);
+			}
+		}
+
+		echo "--sql--\n";
+		echo $sql_emitter->emit_plan($plan);
+	}
+
+	private static function read_current_schema(): ?\om3\base\db\db_database
+	{
+		$argc = cli_argc();
+		$argv = cli_argv();
+
+		$config = new \om3\base\db\mysql_connection_config();
+		$config->host = (string) $argv[1];
+		$config->username = (string) $argv[2];
+		$config->password = (string) $argv[3];
+		$config->database_name = (string) $argv[4];
+		$config->connection_charset = "utf8mb4";
+		if ($argc > 5) {
+			$config->port = (int) ((string) $argv[5]);
+		}
+		if ($argc > 6) {
+			$config->socket = (string) $argv[6];
+		}
+
+		$reader = new \om3\base\db\mysql_schema_reader();
+		$db = $reader->read_database($config);
+		if ($db === null) {
+			echo "read_failed\n";
+			foreach ($reader->errors as $error) {
+				echo $error, "\n";
+			}
+			return null;
+		}
+
+		if (count($reader->errors) > 0) {
+			echo "--reader_errors--\n";
+			foreach ($reader->errors as $error) {
+				echo $error, "\n";
+			}
+		}
+
+		return $db;
+	}
+
+	private static function build_desired_schema(): ?\om3\base\db\db_database
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$root_class = "Omi\\App";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+		$app_root = $assembler->build_legacy_orm_root($dir, $root_class);
+		if ($app_root === null) {
+			echo "build_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return null;
+		}
+
+		$db_builder = new \om3\base\db\structure_builder();
+		$db = $db_builder->begin_legacy_orm_database();
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		$root_key = self::normalize_legacy_type_name_local($root_class);
+		$normalized_root_key ?string = null;
+		if ($root_key !== null) {
+			$normalized_root_key = (string) $root_key;
+		}
+
+		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
+			$type_name = $all_types->items[$type_index];
+			if ($normalized_root_key !== null) {
+				$root_key_text string = (string) $normalized_root_key;
+				if ($type_name == $root_key_text) {
+					continue;
+				}
+			}
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
+			if ($type_root === null) {
+				continue;
+			}
+			$db_builder->append_orm_root_to_database($db, $type_root);
+		}
+
+		$db_builder->append_orm_root_to_database($db, $app_root);
+
+		if (count($db_builder->errors) > 0) {
+			echo "--builder_errors--\n";
+			foreach ($db_builder->errors as $error) {
+				echo $error, "\n";
+			}
+		}
+
+		return $db;
+	}
+
+	private static function normalize_legacy_type_name_local(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$type_text string = (string) $type_name;
+		$trimmed = trim($type_text);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
+	}
+
+	private static function print_operation(\om3\base\db\schema_update_operation $operation): void
+	{
+		echo ($operation->kind ?? ""), "\t";
+		echo ($operation->safety ?? ""), "\t";
+		echo ($operation->table_name ?? ""), "\t";
+		echo ($operation->column_name ?? ""), "\t";
+		echo ($operation->index_name ?? ""), "\t";
+		echo ($operation->reason ?? ""), "\t";
+		echo ($operation->summary ?? ""), "\n";
+	}
+
+	private static function print_warning(\om3\base\db\schema_update_warning $warning): void
+	{
+		echo ($warning->code ?? ""), "\t";
+		echo ($warning->table_name ?? ""), "\t";
+		echo ($warning->column_name ?? ""), "\t";
+		echo ($warning->message ?? ""), "\n";
+	}
+}
+
+\om3\tools\schema_live_update_probe\main::run();

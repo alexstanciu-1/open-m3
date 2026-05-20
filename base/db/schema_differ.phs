@@ -1,0 +1,453 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class schema_differ
+{
+	public function diff(?db_database $current, ?db_database $desired): schema_update_plan
+	{
+		$plan = new schema_update_plan();
+		$plan->current = $current;
+		$plan->desired = $desired;
+
+		if ($desired === null) {
+			$warning = new schema_update_warning();
+			$warning->code = "missing_desired_schema";
+			$warning->message = "Schema differ requires a desired db_database.";
+			$plan->add_unsupported($warning);
+			return $plan;
+		}
+
+		$this->diff_tables($plan, $current, $desired);
+		return $plan;
+	}
+
+	private function diff_tables(schema_update_plan $plan, ?db_database $current, db_database $desired): void
+	{
+		foreach ($desired->tables as $table_name => $desired_table) {
+			$current_table ?db_table = null;
+			if ($current !== null && isset($current->tables[$table_name])) {
+				$current_table = $current->tables[$table_name];
+			}
+			if ($current_table === null) {
+				$operation = $this->new_operation("create_table", "safe", $desired, $table_name);
+				$operation->summary = "Create missing table `" . $table_name . "`.";
+				$operation->desired_table = $desired_table;
+				$plan->add_executable($operation);
+				continue;
+			}
+
+			$this->diff_table_options($plan, $current, $current_table, $desired_table);
+			$this->diff_columns($plan, $current, $current_table, $desired_table);
+			$this->diff_indexes($plan, $current, $current_table, $desired_table);
+		}
+
+		if ($current === null) {
+			return;
+		}
+
+		foreach ($current->tables as $table_name => $current_table) {
+			if (isset($desired->tables[$table_name])) {
+				continue;
+			}
+			$operation = $this->new_operation("drop_table_proposal", "proposal_only", $current, $table_name);
+			$operation->summary = "Existing table `" . $table_name . "` is not present in desired schema.";
+			$operation->reason = "drop_table_not_auto_executed";
+			$operation->current_table = $current_table;
+			$plan->add_proposal($operation);
+		}
+	}
+
+	private function diff_table_options(schema_update_plan $plan, ?db_database $database, db_table $current_table, db_table $desired_table): void
+	{
+		$reasons vector<string> = [];
+		if (
+			!h2b_compatibility_policy::treats_engine_drift_as_non_semantic() &&
+			$this->should_compare_optional_text($desired_table->engine) &&
+			$current_table->engine !== $desired_table->engine
+		) {
+			$reasons[] = "engine";
+		}
+		if ($this->should_compare_optional_text($desired_table->charset) && $current_table->charset !== $desired_table->charset) {
+			$reasons[] = "charset";
+		}
+		if ($this->should_compare_optional_text($desired_table->collation) && $current_table->collation !== $desired_table->collation) {
+			$reasons[] = "collation";
+		}
+
+		if (count($reasons) <= 0) {
+			return;
+		}
+
+		$table_name = (string) ($desired_table->name ?? $current_table->name ?? "");
+		$operation = $this->new_operation("update_table_options", "safe", $database, $table_name);
+		$operation->summary = "Update table options for `" . $table_name . "`.";
+		$operation->reason = implode(",", $reasons);
+		$operation->current_table = $current_table;
+		$operation->desired_table = $desired_table;
+		$plan->add_executable($operation);
+	}
+
+	private function diff_columns(schema_update_plan $plan, ?db_database $database, db_table $current_table, db_table $desired_table): void
+	{
+		foreach ($desired_table->columns as $column_name => $desired_column) {
+			$current_column ?db_column = null;
+			if (isset($current_table->columns[$column_name])) {
+				$current_column = $current_table->columns[$column_name];
+			}
+			if ($current_column === null) {
+				$operation = $this->new_operation("add_column", "safe", $database, (string) ($desired_table->name ?? ""));
+				$operation->column_name = $column_name;
+				$operation->summary = "Add missing column `" . $column_name . "` to `" . ($desired_table->name ?? "") . "`.";
+				$operation->desired_table = $desired_table;
+				$operation->desired_column = $desired_column;
+				$plan->add_executable($operation);
+				continue;
+			}
+
+			$change_reason = $this->compare_columns($current_column, $desired_column);
+			if ($change_reason === null) {
+				continue;
+			}
+
+			$safety = $this->classify_column_change_safety($current_column, $desired_column);
+			$operation = $this->new_operation("modify_column", $safety, $database, (string) ($desired_table->name ?? ""));
+			$operation->column_name = $column_name;
+			$operation->summary = "Modify column `" . $column_name . "` on `" . ($desired_table->name ?? "") . "`.";
+			$operation->reason = $change_reason;
+			$operation->current_table = $current_table;
+			$operation->desired_table = $desired_table;
+			$operation->current_column = $current_column;
+			$operation->desired_column = $desired_column;
+			if ($safety == "safe") {
+				$plan->add_executable($operation);
+			} else {
+				$operation->summary = "Proposed risky modification for column `" . $column_name . "` on `" . ($desired_table->name ?? "") . "`.";
+				$plan->add_proposal($operation);
+
+				$warning = new schema_update_warning();
+				$warning->code = "risky_modify_column";
+				$warning->database_name = (($database !== null) ? $database->name : null);
+				$warning->table_name = (string) ($desired_table->name ?? "");
+				$warning->column_name = $column_name;
+				$warning->message = "Column modification requires review before execution: " . $change_reason;
+				$plan->add_warning($warning);
+			}
+		}
+
+		foreach ($current_table->columns as $column_name => $current_column) {
+			if (isset($desired_table->columns[$column_name])) {
+				continue;
+			}
+			$operation = $this->new_operation("drop_column_proposal", "proposal_only", $database, (string) ($current_table->name ?? ""));
+			$operation->column_name = $column_name;
+			$operation->summary = "Existing column `" . $column_name . "` is not present in desired schema for `" . ($current_table->name ?? "") . "`.";
+			$operation->reason = "drop_column_not_auto_executed";
+			$operation->current_table = $current_table;
+			$operation->current_column = $current_column;
+			$plan->add_proposal($operation);
+		}
+	}
+
+	private function diff_indexes(schema_update_plan $plan, ?db_database $database, db_table $current_table, db_table $desired_table): void
+	{
+		foreach ($desired_table->indexes as $index_name => $desired_index) {
+			$current_index ?db_index = null;
+			if (isset($current_table->indexes[$index_name])) {
+				$current_index = $current_table->indexes[$index_name];
+			}
+			if ($current_index === null) {
+				$operation = $this->new_operation("add_index", "safe", $database, (string) ($desired_table->name ?? ""));
+				$operation->index_name = $index_name;
+				$operation->summary = "Add missing index `" . $index_name . "` to `" . ($desired_table->name ?? "") . "`.";
+				$operation->desired_table = $desired_table;
+				$operation->desired_index = $desired_index;
+				$plan->add_executable($operation);
+				continue;
+			}
+
+			$change_reason = $this->compare_indexes($current_index, $desired_index);
+			if ($change_reason === null) {
+				continue;
+			}
+
+			$operation = $this->new_operation("modify_index", "safe", $database, (string) ($desired_table->name ?? ""));
+			$operation->index_name = $index_name;
+			$operation->summary = "Modify index `" . $index_name . "` on `" . ($desired_table->name ?? "") . "`.";
+			$operation->reason = $change_reason;
+			$operation->current_table = $current_table;
+			$operation->desired_table = $desired_table;
+			$operation->current_index = $current_index;
+			$operation->desired_index = $desired_index;
+			$plan->add_executable($operation);
+		}
+
+		foreach ($current_table->indexes as $index_name => $current_index) {
+			if (isset($desired_table->indexes[$index_name])) {
+				continue;
+			}
+			$operation = $this->new_operation("drop_index", "safe", $database, (string) ($current_table->name ?? ""));
+			$operation->index_name = $index_name;
+			$operation->summary = "Drop extra index `" . $index_name . "` from `" . ($current_table->name ?? "") . "`.";
+			$operation->reason = "index_missing_from_desired";
+			$operation->current_table = $current_table;
+			$operation->current_index = $current_index;
+			$plan->add_executable($operation);
+		}
+	}
+
+	private function compare_columns(db_column $current_column, db_column $desired_column): ?string
+	{
+		$reasons vector<string> = [];
+		if ($current_column->type !== $desired_column->type) {
+			$reasons[] = "type";
+		}
+		if (!$this->column_lengths_semantically_equal($current_column, $desired_column)) {
+			$reasons[] = "length";
+		}
+		if (!$this->column_value_lists_semantically_equal($current_column, $desired_column)) {
+			$reasons[] = "values";
+		}
+		if ($this->should_compare_optional_text($desired_column->charset) && $current_column->charset !== $desired_column->charset) {
+			$reasons[] = "charset";
+		}
+		if ($this->should_compare_optional_text($desired_column->collation) && $current_column->collation !== $desired_column->collation) {
+			$reasons[] = "collation";
+		}
+		if ($current_column->unsigned !== $desired_column->unsigned) {
+			$reasons[] = "unsigned";
+		}
+		if ($current_column->is_nullable !== $desired_column->is_nullable) {
+			$reasons[] = "nullability";
+		}
+		if ($current_column->auto_increment !== $desired_column->auto_increment) {
+			$reasons[] = "auto_increment";
+		}
+		if ($current_column->compressed !== $desired_column->compressed) {
+			$reasons[] = "compressed";
+		}
+		if (count($reasons) <= 0) {
+			return null;
+		}
+		return implode(",", $reasons);
+	}
+
+	private function compare_indexes(db_index $current_index, db_index $desired_index): ?string
+	{
+		$reasons vector<string> = [];
+		if ($current_index->kind !== $desired_index->kind) {
+			$reasons[] = "kind";
+		}
+		if (count($current_index->columns) !== count($desired_index->columns)) {
+			$reasons[] = "columns";
+		} else {
+			for ($i = 0; $i < count($current_index->columns); $i++) {
+				if ($current_index->columns[$i] !== $desired_index->columns[$i]) {
+					$reasons[] = "columns";
+					break;
+				}
+			}
+		}
+
+		if (count($reasons) <= 0) {
+			return null;
+		}
+		return implode(",", $reasons);
+	}
+
+	private function classify_column_change_safety(db_column $current_column, db_column $desired_column): string
+	{
+		if ($current_column->type !== $desired_column->type) {
+			return "proposal_only";
+		}
+		if (!$this->column_value_lists_semantically_equal($current_column, $desired_column)) {
+			return "proposal_only";
+		}
+		if ($current_column->unsigned !== $desired_column->unsigned) {
+			return "proposal_only";
+		}
+		if ($current_column->auto_increment !== $desired_column->auto_increment) {
+			return "proposal_only";
+		}
+		if ($current_column->compressed !== $desired_column->compressed) {
+			return "proposal_only";
+		}
+		if ($current_column->is_nullable && !$desired_column->is_nullable) {
+			return "proposal_only";
+		}
+		if (
+			!$this->column_lengths_semantically_equal($current_column, $desired_column) &&
+			!$this->is_length_change_safe($current_column->length, $desired_column->length)
+		) {
+			return "proposal_only";
+		}
+		return "safe";
+	}
+
+	private function column_lengths_semantically_equal(db_column $current_column, db_column $desired_column): bool
+	{
+		if ($current_column->length === $desired_column->length) {
+			return true;
+		}
+
+		$current_type = strtolower(trim((string) $current_column->type));
+		$desired_type = strtolower(trim((string) $desired_column->type));
+		if ($current_type !== $desired_type) {
+			return false;
+		}
+
+		if ($this->is_non_semantic_integer_display_width_type($current_type)) {
+			return true;
+		}
+		if ($this->is_default_varchar_length_pair($current_type, $current_column->length, $desired_column->length)) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private function is_non_semantic_integer_display_width_type(string $type_name): bool
+	{
+		return (
+			$type_name == "tinyint" ||
+			$type_name == "smallint" ||
+			$type_name == "int" ||
+			$type_name == "integer" ||
+			$type_name == "bigint"
+		);
+	}
+
+	private function is_default_varchar_length_pair(string $type_name, ?string $current_length, ?string $desired_length): bool
+	{
+		if ($type_name != "varchar") {
+			return false;
+		}
+
+		$current = (($current_length !== null) ? trim($current_length) : "");
+		$desired = (($desired_length !== null) ? trim($desired_length) : "");
+
+		return (
+			(($current == "255") && ($desired == "")) ||
+			(($desired == "255") && ($current == ""))
+		);
+	}
+
+	private function column_value_lists_semantically_equal(db_column $current_column, db_column $desired_column): bool
+	{
+		if ($current_column->values === $desired_column->values) {
+			if ($current_column->value_list === null && $desired_column->value_list === null) {
+				return true;
+			}
+		}
+
+		$current_type = strtolower(trim((string) $current_column->type));
+		$desired_type = strtolower(trim((string) $desired_column->type));
+		if ($current_type !== $desired_type) {
+			return false;
+		}
+		if ($current_type != "enum" && $current_type != "set") {
+			return ($current_column->values === $desired_column->values);
+		}
+
+		$current_items = $this->column_value_items($current_column);
+		$desired_items = $this->column_value_items($desired_column);
+		return ($this->serialize_value_items($current_items) === $this->serialize_value_items($desired_items));
+	}
+
+	private function column_value_items(db_column $column): vector<string>
+	{
+		if ($column->value_list !== null) {
+			return $column->value_list->items;
+		}
+
+		$out vector<string> = [];
+		$raw = (($column->values !== null) ? trim($column->values) : "");
+		if ($raw === "") {
+			return $out;
+		}
+
+		$length = strlen($raw);
+		$current = "";
+		$in_quote = false;
+		for ($i = 0; $i < $length; $i++) {
+			$ch = substr($raw, $i, 1);
+			if ($ch == "'") {
+				if ($in_quote && ($i + 1 < $length) && substr($raw, $i + 1, 1) == "'") {
+					$current = $current . "'";
+					$i++;
+					continue;
+				}
+				$in_quote = !$in_quote;
+				continue;
+			}
+			if (!$in_quote && $ch == ",") {
+				$out[] = trim($current);
+				$current = "";
+				continue;
+			}
+			$current = $current . $ch;
+		}
+		if ($current !== "" || $length > 0) {
+			$out[] = trim($current);
+		}
+		return $out;
+	}
+
+	private function serialize_value_items(vector<string> $items): string
+	{
+		$out vector<string> = [];
+		$copy vector<string> = [];
+		for ($i = 0; $i < count($items); $i++) {
+			$copy[] = $items[$i];
+		}
+		foreach ($copy as $item) {
+			$out[] = str_replace("|", "||", $item);
+		}
+		return implode("|", $out);
+	}
+
+	private function is_length_change_safe(?string $current_length, ?string $desired_length): bool
+	{
+		if ($current_length === $desired_length) {
+			return true;
+		}
+		if ($current_length === null || $current_length === "" || $desired_length === null || $desired_length === "") {
+			return false;
+		}
+		if (!$this->is_simple_numeric_text($current_length) || !$this->is_simple_numeric_text($desired_length)) {
+			return false;
+		}
+		return ((int) $desired_length >= (int) $current_length);
+	}
+
+	private function is_simple_numeric_text(string $value): bool
+	{
+		if ($value === "") {
+			return false;
+		}
+		for ($i = 0; $i < strlen($value); $i++) {
+			$ch = substr($value, $i, 1);
+			if ($ch < "0" || $ch > "9") {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private function new_operation(string $kind, string $safety, ?db_database $database, string $table_name): schema_update_operation
+	{
+		$operation = new schema_update_operation();
+		$operation->kind = $kind;
+		$operation->safety = $safety;
+		$operation->database_name = (($database !== null) ? $database->name : null);
+		$operation->table_name = $table_name;
+		return $operation;
+	}
+
+	private function should_compare_optional_text(?string $desired_value): bool
+	{
+		if ($desired_value === null) {
+			return false;
+		}
+		return trim($desired_value) !== "";
+	}
+}

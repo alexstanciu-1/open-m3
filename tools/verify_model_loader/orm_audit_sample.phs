@@ -151,7 +151,7 @@ class orm_audit_sample
 			if ($root_key !== null && $type_name == $root_key) {
 				continue;
 			}
-			$type_root = $assembler->build_legacy_orm_root($dir, $type_name);
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
 			if ($type_root === null) {
 				continue;
 			}

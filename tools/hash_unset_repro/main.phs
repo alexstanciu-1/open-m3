@@ -1,0 +1,8 @@
+namespace om3\tools\hash_unset_repro;
+
+$items hash<int> = [];
+$items["a"] = 10;
+$items["b"] = 20;
+unset($items["a"]);
+echo "has_a=", isset($items["a"]) ? "yes" : "no", "\n";
+echo "has_b=", isset($items["b"]) ? "yes" : "no", "\n";

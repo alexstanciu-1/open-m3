@@ -1,0 +1,44 @@
+namespace om3\tools\nullable_property_method_boundary_repro;
+
+class fake_mat
+{
+	public ?string $scalar_sql_type = null;
+}
+
+class demo_builder
+{
+	public function outer(string $type_name, fake_mat $mat): string
+	{
+		$mapped_type_source string = $type_name;
+		$sql_type = $mat->scalar_sql_type;
+		if ($sql_type !== null) {
+			if ($sql_type !== "") {
+				$mapped_type_source = (string) $sql_type;
+			}
+		}
+		return $this->map_scalar_type_like($mapped_type_source);
+	}
+
+	private function map_scalar_type_like(string $type_name): string
+	{
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			return "varchar";
+		}
+		return $type_key;
+	}
+}
+
+class main
+{
+	public static function run(): void
+	{
+		$mat = new fake_mat();
+		$builder = new demo_builder();
+		echo "start\n";
+		echo "result=", $builder->outer("string", $mat), "\n";
+		echo "done\n";
+	}
+}
+
+\om3\tools\nullable_property_method_boundary_repro\main::run();

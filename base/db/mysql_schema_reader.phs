@@ -1,0 +1,362 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class mysql_schema_reader
+{
+	public $errors vector<string> = [];
+
+	public function read_database(mysql_connection_config $config): ?db_database
+	{
+		if ($config->host === null || $config->host === "") {
+			$this->errors[] = "missing_host";
+			return null;
+		}
+		if ($config->username === null) {
+			$this->errors[] = "missing_username";
+			return null;
+		}
+		if ($config->password === null) {
+			$this->errors[] = "missing_password";
+			return null;
+		}
+		if ($config->database_name === null || $config->database_name === "") {
+			$this->errors[] = "missing_database_name";
+			return null;
+		}
+
+		$conn = new \scpp\mysqli(
+			(string) $config->host,
+			(string) $config->username,
+			(string) $config->password,
+			(string) $config->database_name,
+			$config->port,
+			(string) ($config->socket ?? "")
+		);
+
+		if ($conn->connect_errno != 0) {
+			$this->errors[] = "connect_failed:" . (string) $conn->connect_errno . ":" . (string) $conn->connect_error;
+			$conn->close();
+			return null;
+		}
+
+		if ($config->connection_charset !== null && $config->connection_charset !== "") {
+			if (!$conn->set_charset((string) $config->connection_charset)) {
+				$this->errors[] = "set_charset_failed:" . (string) $conn->errno_code . ":" . (string) $conn->error;
+			}
+		}
+
+		$db = $this->read_database_from_connection($conn, (string) $config->database_name);
+		$conn->close();
+		return $db;
+	}
+
+	public function read_database_from_connection(\scpp\mysqli $conn, string $database_name): ?db_database
+	{
+		$db = new db_database();
+		$db->name = $database_name;
+
+		$this->load_database_defaults($conn, $db);
+
+		$error_count_before = count($this->errors);
+		$table_rows = $this->query_assoc_rows($conn, "SHOW TABLE STATUS IN " . $this->escape_name($database_name));
+		if (count($this->errors) > $error_count_before) {
+			return null;
+		}
+
+		foreach ($table_rows as $table_row) {
+			$table_name = $this->read_assoc_string($table_row, "Name");
+			if ($table_name === null || $table_name === "") {
+				continue;
+			}
+
+			$table = new db_table();
+			$table->parent_database = $db;
+			$table->name = $table_name;
+			$table->engine = $this->read_assoc_string($table_row, "Engine");
+			$table->collation = $this->read_assoc_string($table_row, "Collation");
+			$table->charset = $this->charset_from_collation($table->collation);
+			$table->comment = $this->read_assoc_string($table_row, "Comment");
+
+			$this->load_columns($conn, $database_name, $table);
+			$this->load_indexes($conn, $database_name, $table);
+
+			$db->tables[$table_name] = $table;
+		}
+
+		return $db;
+	}
+
+	private function load_database_defaults(\scpp\mysqli $conn, db_database $db): void
+	{
+		if ($db->name === null || $db->name === "") {
+			return;
+		}
+
+		$sql = "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = " . $this->quote_sql_string($db->name) . " LIMIT 1";
+		$error_count_before = count($this->errors);
+		$rows = $this->query_assoc_rows($conn, $sql);
+		if (count($this->errors) > $error_count_before || count($rows) <= 0) {
+			return;
+		}
+
+		$row = $rows[0];
+		$db->charset = $this->read_assoc_string($row, "DEFAULT_CHARACTER_SET_NAME");
+		$db->collation = $this->read_assoc_string($row, "DEFAULT_COLLATION_NAME");
+	}
+
+	private function load_columns(\scpp\mysqli $conn, string $database_name, db_table $table): void
+	{
+		if ($table->name === null || $table->name === "") {
+			return;
+		}
+
+		$sql = "SHOW FULL COLUMNS FROM " . $this->escape_name($database_name) . "." . $this->escape_name($table->name);
+		$error_count_before = count($this->errors);
+		$rows = $this->query_assoc_rows($conn, $sql);
+		if (count($this->errors) > $error_count_before) {
+			return;
+		}
+
+		foreach ($rows as $row) {
+			$column_name = $this->read_assoc_string($row, "Field");
+			if ($column_name === null || $column_name === "") {
+				continue;
+			}
+
+			$column = new db_column();
+			$column->parent_table = $table;
+			$column->name = $column_name;
+			$type_text = $this->read_assoc_string($row, "Type");
+			$this->apply_column_type($column, $type_text);
+			$column->collation = $this->read_assoc_string($row, "Collation");
+			$column->charset = $this->charset_from_collation($column->collation);
+			$null_text = $this->read_assoc_string($row, "Null");
+			$column->is_nullable = ($null_text !== null && strtoupper($null_text) == "YES");
+			$column->default_value = $this->read_assoc_maybe_string($row, "Default");
+			$extra_text = $this->read_assoc_string($row, "Extra");
+			$column->auto_increment = ($extra_text !== null && strpos(strtolower($extra_text), "auto_increment") !== false);
+			$column->comment = $this->read_assoc_string($row, "Comment");
+			$table->columns[$column_name] = $column;
+		}
+	}
+
+	private function load_indexes(\scpp\mysqli $conn, string $database_name, db_table $table): void
+	{
+		if ($table->name === null || $table->name === "") {
+			return;
+		}
+
+		$sql = "SHOW INDEX FROM " . $this->escape_name($database_name) . "." . $this->escape_name($table->name);
+		$error_count_before = count($this->errors);
+		$rows = $this->query_assoc_rows($conn, $sql);
+		if (count($this->errors) > $error_count_before) {
+			return;
+		}
+
+		foreach ($rows as $row) {
+			$index_name = $this->normalize_index_name($this->read_assoc_string($row, "Key_name"));
+			if ($index_name === null || $index_name === "") {
+				continue;
+			}
+
+			if (!isset($table->indexes[$index_name])) {
+				$index = new db_index();
+				$index->parent_table = $table;
+				$index->name = $index_name;
+				$index->kind = $this->map_index_kind($row);
+				$table->indexes[$index_name] = $index;
+			}
+
+			$column_name = $this->read_assoc_string($row, "Column_name");
+			if ($column_name !== null && $column_name !== "") {
+				$table->indexes[$index_name]->columns[] = $column_name;
+			}
+		}
+	}
+
+	private function query_assoc_rows(\scpp\mysqli $conn, string $sql): vector<mixed>
+	{
+		$result = $conn->query($sql);
+		$rows vector<mixed> = [];
+		if ($result === false) {
+			$this->errors[] = "query_failed:" . $sql . ":" . (string) $conn->errno_code . ":" . (string) $conn->error;
+			return $rows;
+		}
+		if ($result === true) {
+			return $rows;
+		}
+
+		$row mixed = null;
+		while (true) {
+			$row = $result->fetch_assoc();
+			if ($row === null) {
+				break;
+			}
+			$rows[] = $row;
+		}
+		return $rows;
+	}
+
+	private function apply_column_type(db_column $column, ?string $type_text): void
+	{
+		if ($type_text === null) {
+			$column->type = "varchar";
+			return;
+		}
+
+		$raw = trim($type_text);
+		if ($raw === "") {
+			$column->type = "varchar";
+			return;
+		}
+
+		$compressed_tag = "/*!100301 COMPRESSED*/";
+		if (strpos($raw, $compressed_tag) !== false) {
+			$column->compressed = true;
+			$raw = trim(str_replace($compressed_tag, "", $raw));
+		}
+
+		$unsigned_pos = strpos(strtolower($raw), " unsigned");
+		if ($unsigned_pos !== false) {
+			$column->unsigned = true;
+			$raw = trim(substr($raw, 0, $unsigned_pos));
+		}
+
+		$paren_pos = strpos($raw, "(");
+		if ($paren_pos === false) {
+			$column->type = strtolower($raw);
+			return;
+		}
+
+		$end_paren = strrpos($raw, ")");
+		if ($end_paren === false || $end_paren <= $paren_pos) {
+			$column->type = strtolower($raw);
+			return;
+		}
+
+		$type_base = strtolower(trim(substr($raw, 0, $paren_pos)));
+		$type_inner = substr($raw, $paren_pos + 1, $end_paren - $paren_pos - 1);
+
+		if ($type_base == "enum" || $type_base == "set") {
+			$column->values = $type_inner;
+			$column->value_list = $this->parse_column_value_list($type_base, $type_inner);
+			$column->type = $type_base;
+			return;
+		}
+
+		$column->length = $type_inner;
+		$column->type = $type_base;
+	}
+
+	private function parse_column_value_list(string $kind, string $raw_values): column_value_list
+	{
+		$list = new column_value_list();
+		$list->kind = strtolower(trim($kind));
+
+		$length = strlen($raw_values);
+		$current = "";
+		$in_quote = false;
+		for ($i = 0; $i < $length; $i++) {
+			$ch = substr($raw_values, $i, 1);
+			if ($ch == "'") {
+				if ($in_quote && ($i + 1 < $length) && substr($raw_values, $i + 1, 1) == "'") {
+					$current = $current . "'";
+					$i++;
+					continue;
+				}
+				$in_quote = !$in_quote;
+				continue;
+			}
+			if (!$in_quote && $ch == ",") {
+				$list->items[] = trim($current);
+				$current = "";
+				continue;
+			}
+			$current = $current . $ch;
+		}
+		if ($current !== "" || $length > 0) {
+			$list->items[] = trim($current);
+		}
+		return $list;
+	}
+
+	private function map_index_kind(mixed $row): string
+	{
+		$key_name = $this->normalize_index_name($this->read_assoc_string($row, "Key_name"));
+		if ($key_name !== null && strtoupper($key_name) == "PRIMARY") {
+			return "primary";
+		}
+		if ($key_name !== null && strtolower($key_name) == "primary") {
+			return "primary";
+		}
+
+		$index_type = $this->read_assoc_string($row, "Index_type");
+		if ($index_type !== null && strtoupper($index_type) == "FULLTEXT") {
+			return "fulltext";
+		}
+
+		$non_unique = $this->read_assoc_string($row, "Non_unique");
+		if ($non_unique !== null && trim($non_unique) == "0") {
+			return "unique";
+		}
+
+		return "normal";
+	}
+
+	private function charset_from_collation(?string $collation): ?string
+	{
+		if ($collation === null || $collation === "") {
+			return null;
+		}
+		$pos = strpos($collation, "_");
+		if ($pos === false) {
+			return $collation;
+		}
+		return substr($collation, 0, $pos);
+	}
+
+	private function read_assoc_string(mixed $row, string $key): ?string
+	{
+		if (!isset($row[$key])) {
+			return null;
+		}
+		$value = $row[$key];
+		if ($value === null) {
+			return null;
+		}
+		return (string) $value;
+	}
+
+	private function read_assoc_maybe_string(mixed $row, string $key): mixed
+	{
+		if (!isset($row[$key])) {
+			return null;
+		}
+		$value = $row[$key];
+		if ($value === null) {
+			return null;
+		}
+		return (string) $value;
+	}
+
+	private function escape_name(string $name): string
+	{
+		return "`" . str_replace("`", "``", $name) . "`";
+	}
+
+	private function quote_sql_string(string $value): string
+	{
+		return "'" . str_replace("'", "''", $value) . "'";
+	}
+
+	private function normalize_index_name(?string $index_name): ?string
+	{
+		if ($index_name === null) {
+			return null;
+		}
+		if (strtoupper($index_name) == "PRIMARY") {
+			return "primary";
+		}
+		return $index_name;
+	}
+}

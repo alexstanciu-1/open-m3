@@ -1,0 +1,15 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class sql_dialect
+{
+	public ?string $name = null;
+	public bool $supports_if_not_exists = true;
+	public bool $supports_engine = false;
+	public bool $supports_charset = false;
+	public bool $supports_collation = false;
+	public bool $supports_column_comment = false;
+	public bool $supports_table_comment = false;
+	public bool $supports_unsigned = false;
+	public bool $supports_auto_increment = false;
+}

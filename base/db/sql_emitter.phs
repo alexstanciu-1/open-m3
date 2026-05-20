@@ -1,0 +1,292 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class sql_emitter
+{
+	public ?sql_dialect $dialect = null;
+
+	public function emit_database(db_database $db): string
+	{
+		$statements vector<string> = [];
+		foreach ($db->tables as $table_name => $table) {
+			$statements[] = $this->emit_create_table($table);
+		}
+		return implode("\n\n", $statements) . "\n";
+	}
+
+	protected function emit_create_table(db_table $table): string
+	{
+		$lines vector<string> = [];
+
+		foreach ($table->columns as $column_name => $column) {
+			$lines[] = "  " . $this->emit_column_definition($column);
+		}
+
+		foreach ($table->indexes as $index_name => $index) {
+			$lines[] = "  " . $this->emit_index_definition($index);
+		}
+
+		foreach ($table->references as $reference_name => $reference) {
+			$lines[] = "  " . $this->emit_reference_definition($reference);
+		}
+
+		$table_name = (($table->name !== null) ? (string) $table->name : "");
+
+		$statement = "CREATE TABLE ";
+		if ($this->dialect !== null && $this->dialect->supports_if_not_exists) {
+			$statement = $statement . "IF NOT EXISTS ";
+		}
+		$statement = $statement . $this->quote_identifier($table_name) . " (\n";
+		$statement = $statement . implode(",\n", $lines) . "\n)";
+
+		$options = $this->emit_table_options($table);
+		if ($options !== "") {
+			$statement = $statement . " " . $options;
+		}
+
+		return $statement . ";";
+	}
+
+	protected function emit_column_definition(db_column $column): string
+	{
+		$type_sql = $this->map_column_type($column);
+		$column_name = (($column->name !== null) ? (string) $column->name : "");
+		$is_unsigned = $column->unsigned;
+		$is_nullable = $column->is_nullable;
+		$default_value = $column->default_value;
+		$auto_increment = $column->auto_increment;
+		$comment = (($column->comment !== null) ? (string) $column->comment : "");
+		$out = $this->quote_identifier($column_name) . " " . $type_sql;
+		if ($is_unsigned && $this->dialect !== null && $this->dialect->supports_unsigned) {
+			$out = $out . " UNSIGNED";
+		}
+		$out = $out . ($is_nullable ? " NULL" : " NOT NULL");
+		if ($default_value !== null) {
+			$out = $out . " DEFAULT " . $this->quote_literal_value($default_value);
+		}
+		if ($auto_increment && $this->dialect !== null && $this->dialect->supports_auto_increment) {
+			$out = $out . " AUTO_INCREMENT";
+		}
+		if ($comment !== "" && $this->dialect !== null && $this->dialect->supports_column_comment) {
+			$out = $out . " COMMENT " . $this->quote_string_literal($comment);
+		}
+		return $out;
+	}
+
+	protected function emit_index_definition(db_index $index): string
+	{
+		$quoted_columns vector<string> = [];
+		foreach ($index->columns as $column_name) {
+			$quoted_columns[] = $this->quote_identifier($column_name);
+		}
+
+		$kind_text = (($index->kind !== null) ? (string) $index->kind : "");
+		$index_name = (($index->name !== null) ? (string) $index->name : "");
+		$kind = strtolower(trim($kind_text));
+		if ($kind == "primary") {
+			return "PRIMARY KEY (" . implode(", ", $quoted_columns) . ")";
+		}
+		if ($kind == "unique") {
+			return "UNIQUE KEY " . $this->quote_identifier($index_name) . " (" . implode(", ", $quoted_columns) . ")";
+		}
+		return "KEY " . $this->quote_identifier($index_name) . " (" . implode(", ", $quoted_columns) . ")";
+	}
+
+	protected function emit_reference_definition(db_reference $reference): string
+	{
+		$quoted_columns vector<string> = [];
+		foreach ($reference->columns as $column_name) {
+			$quoted_columns[] = $this->quote_identifier($column_name);
+		}
+
+		$quoted_target_columns vector<string> = [];
+		foreach ($reference->target_columns as $column_name) {
+			$quoted_target_columns[] = $this->quote_identifier($column_name);
+		}
+
+		$reference_name = (($reference->name !== null) ? (string) $reference->name : "");
+		$target_table = (($reference->target_table !== null) ? (string) $reference->target_table : "");
+		$on_delete = (($reference->on_delete !== null) ? (string) $reference->on_delete : "");
+		$on_update = (($reference->on_update !== null) ? (string) $reference->on_update : "");
+
+		$out = "CONSTRAINT " . $this->quote_identifier($reference_name);
+		$out = $out . " FOREIGN KEY (" . implode(", ", $quoted_columns) . ")";
+		$out = $out . " REFERENCES " . $this->quote_identifier($target_table);
+		$out = $out . " (" . implode(", ", $quoted_target_columns) . ")";
+		if ($on_delete !== "") {
+			$out = $out . " ON DELETE " . strtoupper($on_delete);
+		}
+		if ($on_update !== "") {
+			$out = $out . " ON UPDATE " . strtoupper($on_update);
+		}
+		return $out;
+	}
+
+	protected function emit_table_options(db_table $table): string
+	{
+		$options vector<string> = [];
+		$engine = (($table->engine !== null) ? (string) $table->engine : "");
+		$charset = (($table->charset !== null) ? (string) $table->charset : "");
+		$collation = (($table->collation !== null) ? (string) $table->collation : "");
+		$comment = (($table->comment !== null) ? (string) $table->comment : "");
+		if ($engine !== "" && $this->dialect !== null && $this->dialect->supports_engine) {
+			$options[] = "ENGINE=" . strtoupper($engine);
+		}
+		if ($charset !== "" && $this->dialect !== null && $this->dialect->supports_charset) {
+			$options[] = "DEFAULT CHARSET=" . $charset;
+		}
+		if ($collation !== "" && $this->dialect !== null && $this->dialect->supports_collation) {
+			$options[] = "COLLATE=" . $collation;
+		}
+		if ($comment !== "" && $this->dialect !== null && $this->dialect->supports_table_comment) {
+			$options[] = "COMMENT=" . $this->quote_string_literal($comment);
+		}
+		return implode(" ", $options);
+	}
+
+	protected function map_column_type(db_column $column): string
+	{
+		$type_text = (($column->type !== null) ? (string) $column->type : "");
+		$type_name = strtolower(trim($type_text));
+		if ($type_name === "") {
+			return $this->with_length("varchar", $column->length, "255");
+		}
+		$is_mysql = ($this->dialect !== null && $this->dialect->name == "mysql");
+		if (strpos($type_name, "(") !== false) {
+			return $this->lowercase_type_base_preserve_inner($type_name);
+		}
+		if ($type_name == "enum" || $type_name == "set") {
+			if ($column->values === null || trim($column->values) === "") {
+				return $type_name;
+			}
+			return $type_name . "(" . $column->values . ")";
+		}
+		if ($type_name == "int") {
+			return $this->with_length("int", $column->length, ($is_mysql ? "10" : null));
+		}
+		if ($type_name == "smallint") {
+			return $this->with_length("smallint", $column->length, ($is_mysql ? "6" : null));
+		}
+		if ($type_name == "bigint") {
+			return $this->with_length("bigint", $column->length, ($is_mysql ? "20" : null));
+		}
+		if ($type_name == "tinyint") {
+			return $this->with_length("tinyint", $column->length, ($is_mysql ? "1" : null));
+		}
+		if ($type_name == "bool" || $type_name == "boolean") {
+			return $is_mysql ? "tinyint(1)" : "boolean";
+		}
+		if ($type_name == "varchar") {
+			return $this->with_length("varchar", $column->length, "255");
+		}
+		if ($type_name == "char") {
+			return $this->with_length("char", $column->length, "1");
+		}
+		if ($type_name == "decimal") {
+			return $this->with_length("decimal", $column->length, "10,2");
+		}
+		if ($type_name == "numeric") {
+			return $this->with_length("numeric", $column->length, "10,2");
+		}
+		if ($type_name == "float") {
+			return $this->with_length("float", $column->length, null);
+		}
+		if ($type_name == "double") {
+			return $this->with_length("double", $column->length, null);
+		}
+		if ($type_name == "datetime") {
+			return $this->with_length("datetime", $column->length, null);
+		}
+		if ($type_name == "timestamp") {
+			return $this->with_length("timestamp", $column->length, null);
+		}
+		if ($type_name == "date") {
+			return "date";
+		}
+		if ($type_name == "time") {
+			return $this->with_length("time", $column->length, null);
+		}
+		if ($type_name == "enum" || $type_name == "set") {
+			return $this->emit_value_list_type($type_name, $column);
+		}
+		if ($type_name == "text") {
+			return "text";
+		}
+		if ($type_name == "mediumtext") {
+			return "mediumtext";
+		}
+		if ($type_name == "longtext") {
+			return "longtext";
+		}
+		return $this->with_length("varchar", $column->length, "255");
+	}
+
+	protected function with_length(string $base_type, ?string $length, ?string $fallback_length): string
+	{
+		$resolved_length = $length;
+		if ($resolved_length === null) {
+			$resolved_length = $fallback_length;
+		} else if (trim($resolved_length) === "") {
+			$resolved_length = $fallback_length;
+		}
+		if ($resolved_length === null) {
+			return $base_type;
+		}
+		if (trim($resolved_length) === "") {
+			return $base_type;
+		}
+		return $base_type . "(" . trim($resolved_length) . ")";
+	}
+
+	protected function emit_value_list_type(string $type_name, db_column $column): string
+	{
+		if ($column->value_list !== null && count($column->value_list->items) > 0) {
+			$quoted_items vector<string> = [];
+			foreach ($column->value_list->items as $item) {
+				$quoted_items[] = $this->quote_string_literal($item);
+			}
+			return $type_name . "(" . implode(", ", $quoted_items) . ")";
+		}
+		if ($column->values !== null && trim($column->values) !== "") {
+			return $type_name . "(" . $column->values . ")";
+		}
+		return $type_name;
+	}
+
+	protected function quote_identifier(string $value): string
+	{
+		if ($this->dialect !== null && $this->dialect->name == "mysql") {
+			return "`" . str_replace("`", "``", $value) . "`";
+		}
+		return "\"" . str_replace("\"", "\"\"", $value) . "\"";
+	}
+
+	protected function quote_string_literal(string $value): string
+	{
+		return "'" . str_replace("'", "''", $value) . "'";
+	}
+
+	protected function quote_literal_value(mixed $value): string
+	{
+		if ($value === null) {
+			return "NULL";
+		}
+		$text = (string) $value;
+		$upper = strtoupper(trim($text));
+		if ($upper == "CURRENT_TIMESTAMP" || $upper == "CURRENT_TIMESTAMP()") {
+			return "CURRENT_TIMESTAMP";
+		}
+		return $this->quote_string_literal($text);
+	}
+
+	protected function lowercase_type_base_preserve_inner(string $value): string
+	{
+		$paren_pos = strpos($value, "(");
+		if ($paren_pos === false) {
+			return strtolower($value);
+		}
+		$base = strtolower(trim(substr($value, 0, $paren_pos)));
+		$inner = substr($value, $paren_pos);
+		return $base . $inner;
+	}
+}

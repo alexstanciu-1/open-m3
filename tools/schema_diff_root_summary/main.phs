@@ -1,0 +1,75 @@
+namespace om3\tools\schema_diff_root_summary;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$target_type = "Omi/Comm/Order_Item";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+		$app_root = $assembler->build_legacy_orm_root($dir, "Omi\\App");
+		if ($app_root === null) {
+			echo "app_root_failed\n";
+			return;
+		}
+
+		$db_builder = new \om3\base\db\structure_builder();
+		$db = $db_builder->begin_legacy_orm_database();
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		for ($i = 0; $i < count($all_types->items); $i++) {
+			$type_name = $all_types->items[$i];
+			if ($type_name === "Omi/App") {
+				continue;
+			}
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
+			if ($type_root === null) {
+				continue;
+			}
+			if ($type_name === $target_type) {
+				echo "target_root_before_append\n";
+				echo "root_path=", ($type_root->path ?? ""), "\n";
+				echo "node_count=", count($type_root->nodes), "\n";
+				for ($n = 0; $n < count($type_root->nodes); $n++) {
+					$node = $type_root->nodes[$n];
+					echo "node=", $n,
+						"\tpath=", ($node->path ?? ""),
+						"\tname=", ($node->name ?? ""),
+						"\tbranch=", ($node->branch_kind ?? ""),
+						"\tmat_count=", count($node->mat),
+						"\n";
+					for ($m = 0; $m < count($node->mat); $m++) {
+						$mat = $node->mat[$m];
+						echo "mat=", $n, ".", $m,
+							"\tmode=", ($mat->mode ?? ""),
+							"\ttable=", ($mat->table ?? ""),
+							"\tlink=", ($mat->link_table ?? ""),
+							"\tid=", ($mat->id_column ?? ""),
+							"\towner=", ($mat->owner_column ?? ""),
+							"\tvalue=", ($mat->value_column ?? ""),
+							"\ttypecol=", ($mat->type_column ?? ""),
+							"\tsqltype=", ($mat->scalar_sql_type ?? ""),
+							"\n";
+					}
+				}
+			}
+			$db_builder->append_orm_root_to_database($db, $type_root);
+			if ($type_name === $target_type) {
+				echo "target_table_after_append\n";
+				if (isset($db->tables["Orders_Items"])) {
+					$table = $db->tables["Orders_Items"];
+					foreach ($table->columns as $column_name => $column) {
+						echo "col=", ($column->name ?? ""), "\ttype=", ($column->type ?? ""), "\n";
+					}
+				} else {
+					echo "missing_table\n";
+				}
+				return;
+			}
+		}
+
+		echo "target_not_found\n";
+	}
+}
+
+\om3\tools\schema_diff_root_summary\main::run();

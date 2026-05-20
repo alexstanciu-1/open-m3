@@ -50,6 +50,33 @@ These are currently treated as outside the effective ORM parity target for this 
 - `Cache_View`
 - `Cache_Views`
 
+Comparison assumption saved for later live-diff passes:
+
+- when comparing against the legacy H2B SQL dump, `charset`, `collation`, and `comment` drift may be treated as non-semantic by policy
+- this is especially relevant for legacy `utf8mb3` / `utf8mb3_unicode_ci` versus current Open M3 `utf8mb4` defaults
+- under this view, comment-only column differences should be ignored too
+- this assumption does not automatically erase other diffs on the same table/column, such as engine, type, length, enum/set values, or nullability
+
+Current ORM emission policy for this legacy-comparison lane:
+
+- desired Open M3 schema leaves database and table `charset` / `collation` unset by default
+- desired Open M3 schema also leaves table `engine` unset by default
+- MySQL / MariaDB should therefore inherit charset and collation from the target database unless a future explicit override is requested
+- MySQL / MariaDB should therefore inherit table engine from the target database unless a future explicit override is requested
+- comment-only drift is ignored by the differ and should not trigger alter planning on its own
+- Open M3 treats integer storage size as semantic, but MySQL/MariaDB integer display width as non-semantic
+- in practice this means `int(10)` / `int(11)`, `smallint(5)` / `smallint(6)`, and `tinyint(1)` default-width drift should not count as schema mismatch on their own
+- id and reference columns are modeled as unsigned 32-bit integers by default; any MySQL integer width text is a dialect formatting concern, not core ORM meaning
+- for legacy-H2B comparison, implicit Open M3 `varchar` and explicit legacy `varchar(255)` should also be treated as equivalent unless a narrower or wider non-default length is declared
+- for legacy-H2B comparison, engine-only drift is treated as non-semantic too
+- the current ORM does not emit `UNIQUE KEY`; legacy `storage.index = unique` is normalized to a plain non-unique index for compatibility until a future ORM-level uniqueness policy is introduced
+
+These legacy-H2B compatibility defaults are now also codified in:
+
+- [h2b_compatibility_policy.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/h2b_compatibility_policy.phs:1)
+
+So the saved exclusions and comparison assumptions no longer live only in planning notes.
+
 ## Current Effective Status
 
 After excluding the accepted non-ORM / out-of-scope tables above:

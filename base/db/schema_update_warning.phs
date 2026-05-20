@@ -1,0 +1,13 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class schema_update_warning
+{
+	public ?string $code = null;
+	public ?string $message = null;
+	public ?string $database_name = null;
+	public ?string $table_name = null;
+	public ?string $column_name = null;
+	public ?string $index_name = null;
+	public ?string $reference_name = null;
+}

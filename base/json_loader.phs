@@ -150,9 +150,15 @@ class json_loader
 		}
 		if (isset($property_data["sql_type"])) {
 			$out->sql_type = (string) $property_data["sql_type"];
+		} else if (isset($property_data["type"])) {
+			$out->sql_type = (string) $property_data["type"];
 		}
 		if (isset($property_data["nullable"])) {
 			$out->is_nullable = (bool) $property_data["nullable"];
+		} else if (isset($property_data["notnull"])) {
+			$out->is_nullable = !((bool) $property_data["notnull"]);
+		} else if (isset($property_data["nonull"])) {
+			$out->is_nullable = !((bool) $property_data["nonull"]);
 		}
 		if (isset($property_data["default"])) {
 			$out->default = $property_data["default"];

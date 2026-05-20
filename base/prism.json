@@ -25,7 +25,8 @@
         },
         "modules": [
             "json",
-            "filesystem"
+            "filesystem",
+            "mysqli"
         ]
     }
 }

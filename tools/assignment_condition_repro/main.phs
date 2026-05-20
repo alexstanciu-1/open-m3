@@ -1,0 +1,32 @@
+namespace om3\tools\assignment_condition_repro;
+
+class fake_result
+{
+	public int $index = 0;
+
+	public function fetch_assoc(): mixed
+	{
+		if ($this->index >= 1) {
+			return null;
+		}
+		$this->index++;
+		$row hash<string> = [];
+		$row["name"] = "ok";
+		return $row;
+	}
+}
+
+class main
+{
+	public static function run(): void
+	{
+		$result = new fake_result();
+		$rows vector<mixed> = [];
+		while (($row = $result->fetch_assoc()) !== null) {
+			$rows[] = $row;
+		}
+		echo "rows=", (string) count($rows), "\n";
+	}
+}
+
+\om3\tools\assignment_condition_repro\main::run();

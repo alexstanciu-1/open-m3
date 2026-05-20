@@ -1,0 +1,20 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class mysql_sql_emitter extends sql_emitter
+{
+	public function __construct()
+	{
+		$dialect = new sql_dialect();
+		$dialect->name = "mysql";
+		$dialect->supports_if_not_exists = true;
+		$dialect->supports_engine = true;
+		$dialect->supports_charset = true;
+		$dialect->supports_collation = true;
+		$dialect->supports_column_comment = true;
+		$dialect->supports_table_comment = true;
+		$dialect->supports_unsigned = true;
+		$dialect->supports_auto_increment = true;
+		$this->dialect = $dialect;
+	}
+}

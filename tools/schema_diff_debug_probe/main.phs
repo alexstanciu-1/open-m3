@@ -1,0 +1,76 @@
+namespace om3\tools\schema_diff_debug_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$root_class = "Omi\\App";
+
+		echo "phase:assembler\n";
+		$assembler = new \om3\base\assemble\model_assembler();
+
+		echo "phase:app_root\n";
+		$app_root = $assembler->build_legacy_orm_root($dir, $root_class);
+		echo "phase:app_root_done\n";
+		if ($app_root === null) {
+			echo "app_root_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		echo "phase:all_types\n";
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		echo "phase:all_types_done:", count($all_types->items), "\n";
+
+		echo "phase:db_begin\n";
+		$db_builder = new \om3\base\db\structure_builder();
+		$db = $db_builder->begin_legacy_orm_database();
+		echo "phase:db_begin_done\n";
+
+		$root_key = self::normalize_legacy_type_name_local($root_class);
+		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
+			$type_name = $all_types->items[$type_index];
+			echo "type:", $type_index, ":", $type_name, "\n";
+			if ($root_key !== null && $type_name == $root_key) {
+				echo "skip_root\n";
+				continue;
+			}
+
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name);
+			echo "built_root:", $type_name, "\n";
+			if ($type_root === null) {
+				echo "skip_null_root:", $type_name, "\n";
+				continue;
+			}
+
+			$db_builder->append_orm_root_to_database($db, $type_root);
+			echo "appended_root:", $type_name, "\n";
+		}
+
+		echo "phase:append_app\n";
+		$db_builder->append_orm_root_to_database($db, $app_root);
+		echo "phase:append_app_done\n";
+		echo "tables=", count($db->tables), "\n";
+	}
+
+	private static function normalize_legacy_type_name_local(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$trimmed = trim($type_name);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
+	}
+}
+
+\om3\tools\schema_diff_debug_probe\main::run();

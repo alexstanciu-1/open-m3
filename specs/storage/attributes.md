@@ -33,7 +33,7 @@ Storage must not cross levels or redefine structural ownership.
 | sql_type | property | string | Declares the scalar storage type for a column materialization. |
 | nullable | property | bool | Declares storage-level nullability. |
 | default | property | scalar or null or storage_expr | Declares storage-level default value generation. |
-| index | property | bool or index_mode | Declares whether the property should be indexed and optionally how, such as unique. |
+| index | property | bool or index_mode | Declares whether the property should be indexed and optionally how. In the current ORM, `unique` is accepted for compatibility but degrades to a normal non-unique index. |
 | relation.type | property | relation_mode | Declares relation materialization mode, such as oneToOne, oneToMany, or manyToMany. |
 | relation.table | property | string | Declares the relation table name when collection materialization needs an explicit table. |
 | relation.this_column | property | string | Declares the column that points back to the owning side of the relation. |
@@ -50,7 +50,7 @@ Storage must not cross levels or redefine structural ownership.
 | Name | Meaning |
 | --- | --- |
 | storage_kind | One of the allowed materialization kinds, such as column, embedded, or none. |
-| index_mode | An index mode such as unique. |
+| index_mode | An index mode such as normal, primary, or fulltext. `unique` is currently treated as compatibility input and normalized to a normal non-unique index. |
 | relation_mode | A relation mode such as oneToOne, oneToMany, or manyToMany. |
 | scalar | A scalar literal value for storage defaults where applicable. |
 | storage_expr | A storage-level generated/default expression. |
@@ -69,7 +69,7 @@ Storage must not cross levels or redefine structural ownership.
 | relationship planning | Relation planning should be derived by the ORM by default. Explicit relation metadata exists only to guide naming and materialization details when needed. |
 | collection defaults | Collection properties should default to `manyToMany`, except on the root model where the common default should be `oneToMany`. |
 | none materialization | A non-persisted property should be expressed as `kind: none`, not a separate skip flag. |
-| indexing | Uniqueness should be expressed through `index: unique`, not a separate unique attribute. |
+| indexing | The current ORM does not emit `UNIQUE KEY`. Uniqueness must be treated as ORM-level behavior for now, with future policy intended around directives such as `mergeBy`. Storage metadata may still contain `index: unique` for legacy compatibility, but it currently normalizes to a plain non-unique index. |
 
 ## Current ORM Rule Clarifications
 

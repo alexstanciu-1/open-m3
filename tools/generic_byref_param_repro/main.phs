@@ -1,0 +1,19 @@
+namespace om3\tools\generic_byref_param_repro;
+
+class main
+{
+	public static function fill_rows(vector<mixed> &$rows): void
+	{
+		$rows[] = "alpha";
+		$rows[] = "beta";
+	}
+
+	public static function run(): void
+	{
+		$rows vector<mixed> = [];
+		self::fill_rows($rows);
+		echo "rows=", (string) count($rows), "\n";
+	}
+}
+
+\om3\tools\generic_byref_param_repro\main::run();

@@ -71,7 +71,7 @@ Storage must not cross levels or redefine ownership.
 | Keep naming local | Inside explicit storage definition context, use `table`, `column`, `kind`, `none`, and similar local storage names without the `storage.` prefix. |
 | Shared storage for abstract targets | When a property references an abstract model, derived concrete types should ideally materialize together for performance and simpler querying. |
 | Keep storage-specific data local | Column names, join tables, indexes, and storage engine details should stay in storage metadata only. |
-| Keep indexing unified | Uniqueness should be expressed through index configuration, such as `index: unique`, rather than a separate unique attribute. |
+| Keep indexing unified | The current ORM intentionally does not emit `UNIQUE KEY`. If legacy metadata expresses `index: unique`, Open M3 currently keeps it only as compatibility input and materializes a plain non-unique index instead. Future uniqueness behavior should live at ORM policy level rather than direct SQL uniqueness by default. |
 | Let the ORM plan relationships | Relation type should be chosen by the ORM from the model shape by default, while explicit relation metadata may refine oneToOne, oneToMany, or manyToMany naming details when needed. |
 | Default collection planning carefully | Collection properties should default to many-to-many, except on the root model where the common default should be one-to-many. |
 | Move UI hints out | View/editor/popup/layout hints encoded in legacy storage metadata should move to view metadata in Open M3. |

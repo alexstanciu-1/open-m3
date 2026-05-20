@@ -124,6 +124,10 @@ For the detailed current implementation logic:
 
 - [orm_materialization_direction.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_materialization_direction.md:1)
 
+For the current schema-update planning direction:
+
+- [orm_schema_update_direction.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_schema_update_direction.md:1)
+
 For relation-specific rules:
 
 - [openm3_relation_rule_sheet.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/openm3_relation_rule_sheet.md:1)

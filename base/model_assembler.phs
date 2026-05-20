@@ -1497,8 +1497,25 @@ class model_assembler
 		}
 
 		$route_index int = 0;
+		$storage_index = ($property_storage !== null && isset($property_storage["index"]))
+			? $property_storage["index"]
+			: null;
+		$storage_default = ($property_storage !== null && isset($property_storage["default"]))
+			? $property_storage["default"]
+			: null;
+		$storage_nullable ?bool = null;
+		if ($property_storage !== null) {
+			if (isset($property_storage["nullable"])) {
+				$storage_nullable = (bool) $property_storage["nullable"];
+			} else if (isset($property_storage["notnull"])) {
+				$storage_nullable = !((bool) $property_storage["notnull"]);
+			}
+		}
 		$property_needs_type_column = $this->legacy_property_needs_type_column($property_data, $type_names, $type_map);
 		foreach ($route_map as $route) {
+			$route->storage_index = $storage_index;
+			$route->storage_default = $storage_default;
+			$route->storage_nullable = $storage_nullable;
 			if ((count($route->types) > 1 && $targets_models) || ($property_needs_type_column && (($route->mode ?? "") === "ref_column"))) {
 				$type_column_base = $route->id_column;
 				if ($type_column_base === null || $type_column_base === "") {

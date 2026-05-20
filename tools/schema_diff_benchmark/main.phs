@@ -1,0 +1,171 @@
+namespace om3\tools\schema_diff_benchmark;
+
+class main
+{
+	public static function run(): void
+	{
+		$dir = "/home/alexv/__AI/open_m3/open_m3_primary/_legacy_code/h2b/code/temp/types_json";
+		$root_class = "Omi\\App";
+
+		$assembler = new \om3\base\assemble\model_assembler();
+
+		echo "phase:app_root:start\n";
+		$t0 = php::microtime(true);
+		$app_root = $assembler->build_legacy_orm_root($dir, $root_class);
+		$t1 = php::microtime(true);
+		if ($app_root === null) {
+			echo "app_root_failed\n";
+			foreach ($assembler->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+		echo "phase:app_root:done:", self::format_seconds($t1 - $t0), "\n";
+
+		echo "phase:list_types:start\n";
+		$all_types = $assembler->list_legacy_instantiable_root_types($dir);
+		$t2 = php::microtime(true);
+		echo "phase:list_types:done:", self::format_seconds($t2 - $t1), ":", count($all_types->items), "\n";
+
+		echo "phase:begin_db:start\n";
+		$db_builder = new \om3\base\db\structure_builder();
+		$db_builder->metric_trace_first_append = true;
+		$db = $db_builder->begin_legacy_orm_database();
+		$t3 = php::microtime(true);
+		echo "phase:begin_db:done:", self::format_seconds($t3 - $t2), "\n";
+
+		$root_key = self::normalize_legacy_type_name_local($root_class);
+		$normalized_root_key ?string = null;
+		if ($root_key !== null) {
+			$normalized_root_key = (string) $root_key;
+		}
+
+		$roots_attempted int = 0;
+		$roots_built int = 0;
+		$roots_appended int = 0;
+		$shallow_build_total float = 0.0;
+		$shallow_append_total float = 0.0;
+		$slowest_build_type string = "";
+		$slowest_build_seconds float = 0.0;
+		$slowest_append_type string = "";
+		$slowest_append_seconds float = 0.0;
+
+		echo "phase:shallow_types:start\n";
+		$shallow_start = php::microtime(true);
+		for ($type_index = 0; $type_index < count($all_types->items); $type_index++) {
+			$type_name = $all_types->items[$type_index];
+			if (($type_index % 10) == 0) {
+				echo "phase:shallow_types:progress:", $type_index, "/", count($all_types->items), "\n";
+			}
+			if ($type_index < 3) {
+				echo "phase:shallow_types:first_loop:after_type_name:", $type_index, ":", $type_name, "\n";
+			}
+			if ($normalized_root_key !== null) {
+				$root_key_text string = (string) $normalized_root_key;
+				if ($type_index < 3) {
+					echo "phase:shallow_types:first_loop:before_root_compare:", $type_index, ":", $root_key_text, "\n";
+				}
+				if ($type_name == $root_key_text) {
+					continue;
+				}
+			}
+
+			$roots_attempted = $roots_attempted + 1;
+			if ($roots_attempted <= 3) {
+				echo "phase:shallow_types:first_roots:build_start:", $type_name, "\n";
+			}
+			$type_build_start = php::microtime(true);
+			$type_root = $assembler->build_legacy_orm_root($dir, $type_name, 1);
+			$type_build_end = php::microtime(true);
+			$type_build_seconds = $type_build_end - $type_build_start;
+			if ($roots_attempted <= 3) {
+				echo "phase:shallow_types:first_roots:build_done:", $type_name, ":", self::format_seconds($type_build_seconds), "\n";
+			}
+			$shallow_build_total = $shallow_build_total + $type_build_seconds;
+			if ($type_build_seconds > $slowest_build_seconds) {
+				$slowest_build_seconds = $type_build_seconds;
+				$slowest_build_type = $type_name;
+			}
+			if ($type_root === null) {
+				continue;
+			}
+			$roots_built = $roots_built + 1;
+			if ($roots_attempted <= 3) {
+				echo "phase:shallow_types:first_roots:nodes:", $type_name, ":", count($type_root->nodes), "\n";
+				echo "phase:shallow_types:first_roots:append_start:", $type_name, "\n";
+			}
+			$type_append_start = php::microtime(true);
+			$db_builder->append_orm_root_to_database($db, $type_root);
+			$type_append_end = php::microtime(true);
+			$type_append_seconds = $type_append_end - $type_append_start;
+			if ($roots_attempted <= 3) {
+				echo "phase:shallow_types:first_roots:append_done:", $type_name, ":", self::format_seconds($type_append_seconds), "\n";
+			}
+			$shallow_append_total = $shallow_append_total + $type_append_seconds;
+			if ($type_append_seconds > $slowest_append_seconds) {
+				$slowest_append_seconds = $type_append_seconds;
+				$slowest_append_type = $type_name;
+			}
+			$roots_appended = $roots_appended + 1;
+		}
+		$shallow_end = php::microtime(true);
+		echo "phase:shallow_types:done:", self::format_seconds($shallow_end - $shallow_start), "\n";
+
+		echo "phase:append_app:start\n";
+		$append_app_start = php::microtime(true);
+		$db_builder->append_orm_root_to_database($db, $app_root);
+		$append_app_end = php::microtime(true);
+		echo "phase:append_app:done:", self::format_seconds($append_app_end - $append_app_start), "\n";
+
+		echo "benchmark_version=1\n";
+		echo "app_root_seconds=", self::format_seconds($t1 - $t0), "\n";
+		echo "list_types_seconds=", self::format_seconds($t2 - $t1), "\n";
+		echo "begin_db_seconds=", self::format_seconds($t3 - $t2), "\n";
+		echo "shallow_types_seconds=", self::format_seconds($shallow_end - $shallow_start), "\n";
+		echo "shallow_type_build_total_seconds=", self::format_seconds($shallow_build_total), "\n";
+		echo "shallow_type_append_total_seconds=", self::format_seconds($shallow_append_total), "\n";
+		echo "shallow_type_slowest_build=", $slowest_build_type, "\t", self::format_seconds($slowest_build_seconds), "\n";
+		echo "shallow_type_slowest_append=", $slowest_append_type, "\t", self::format_seconds($slowest_append_seconds), "\n";
+		echo "append_app_seconds=", self::format_seconds($append_app_end - $append_app_start), "\n";
+		echo "builder_begin_db_seconds=", self::format_seconds($db_builder->metric_begin_db_seconds), "\n";
+		echo "builder_append_total_seconds=", self::format_seconds($db_builder->metric_append_total_seconds), "\n";
+		echo "builder_append_index_primary_seconds=", self::format_seconds($db_builder->metric_append_index_primary_seconds), "\n";
+		echo "builder_append_reserve_seconds=", self::format_seconds($db_builder->metric_append_reserve_seconds), "\n";
+		echo "builder_append_apply_seconds=", self::format_seconds($db_builder->metric_append_apply_seconds), "\n";
+		echo "builder_append_roots=", $db_builder->metric_append_roots, "\n";
+		echo "builder_append_nodes_indexed=", $db_builder->metric_append_nodes_indexed, "\n";
+		echo "builder_append_nodes_reserved=", $db_builder->metric_append_nodes_reserved, "\n";
+		echo "builder_append_nodes_applied=", $db_builder->metric_append_nodes_applied, "\n";
+		echo "total_seconds=", self::format_seconds($append_app_end - $t0), "\n";
+		echo "instantiable_types=", count($all_types->items), "\n";
+		echo "roots_attempted=", $roots_attempted, "\n";
+		echo "roots_built=", $roots_built, "\n";
+		echo "roots_appended=", $roots_appended, "\n";
+		echo "schema_tables=", count($db->tables), "\n";
+		echo "schema_errors=", count($db_builder->errors), "\n";
+	}
+
+	private static function normalize_legacy_type_name_local(?string $type_name): ?string
+	{
+		if ($type_name === null) {
+			return null;
+		}
+		$type_text string = (string) $type_name;
+		$trimmed = trim($type_text);
+		if ($trimmed === "") {
+			return null;
+		}
+		$trimmed = str_replace("\\", "/", $trimmed);
+		while (strlen($trimmed) > 0 && substr($trimmed, 0, 1) === "/") {
+			$trimmed = substr($trimmed, 1);
+		}
+		return $trimmed;
+	}
+
+	private static function format_seconds(float $seconds): string
+	{
+		return number_format($seconds, 6, ".", "");
+	}
+}
+
+\om3\tools\schema_diff_benchmark\main::run();

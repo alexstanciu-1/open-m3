@@ -1,0 +1,17 @@
+namespace om3\tools\mixed_type_predicates_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$value mixed = "abc";
+		$is_bool_out = is_bool($value) ? "yes" : "no";
+		$is_int_out = is_int($value) ? "yes" : "no";
+		$is_float_out = is_float($value) ? "yes" : "no";
+		echo "is_bool=", $is_bool_out, "\n";
+		echo "is_int=", $is_int_out, "\n";
+		echo "is_float=", $is_float_out, "\n";
+	}
+}
+
+\om3\tools\mixed_type_predicates_repro\main::run();

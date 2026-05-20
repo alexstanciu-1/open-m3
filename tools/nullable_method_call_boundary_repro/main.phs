@@ -1,0 +1,37 @@
+namespace om3\tools\nullable_method_call_boundary_repro;
+
+class demo_sample
+{
+	public function run_case(string $type_name, ?string $sql_type = null): string
+	{
+		$mapped_type_source string = $type_name;
+		if ($sql_type !== null) {
+			if ($sql_type !== "") {
+				$mapped_type_source = (string) $sql_type;
+			}
+		}
+		return $this->map_scalar_type_like($mapped_type_source);
+	}
+
+	private function map_scalar_type_like(string $type_name): string
+	{
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			return "varchar";
+		}
+		return $type_key;
+	}
+}
+
+class main
+{
+	public static function run(): void
+	{
+		$sample = new demo_sample();
+		echo "start\n";
+		echo "result=", $sample->run_case("string", null), "\n";
+		echo "done\n";
+	}
+}
+
+\om3\tools\nullable_method_call_boundary_repro\main::run();

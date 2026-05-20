@@ -1,0 +1,55 @@
+namespace om3\tools\schema_read_probe;
+
+class main
+{
+	public static function run(): void
+	{
+		$argc = cli_argc();
+		$argv = cli_argv();
+
+		if ($argc < 5) {
+			echo "usage: <host> <user> <pass> <database> [port] [socket]\n";
+			return;
+		}
+
+		$config = new \om3\base\db\mysql_connection_config();
+		$config->host = (string) $argv[1];
+		$config->username = (string) $argv[2];
+		$config->password = (string) $argv[3];
+		$config->database_name = (string) $argv[4];
+		$config->connection_charset = "utf8mb4";
+		if ($argc > 5) {
+			$config->port = (int) ((string) $argv[5]);
+		}
+		if ($argc > 6) {
+			$config->socket = (string) $argv[6];
+		}
+
+		$reader = new \om3\base\db\mysql_schema_reader();
+		$db = $reader->read_database($config);
+		if ($db === null) {
+			echo "read_failed\n";
+			foreach ($reader->errors as $error) {
+				echo $error, "\n";
+			}
+			return;
+		}
+
+		echo "database=", ($db->name ?? ""), "\n";
+		echo "charset=", ($db->charset ?? ""), "\n";
+		echo "collation=", ($db->collation ?? ""), "\n";
+		echo "tables=", count($db->tables), "\n";
+		echo "--tables--\n";
+		foreach ($db->tables as $table_name => $table) {
+			echo ($table->name ?? ""), "\t", count($table->columns), "\t", count($table->indexes), "\n";
+		}
+		if (count($reader->errors) > 0) {
+			echo "--errors--\n";
+			foreach ($reader->errors as $error) {
+				echo $error, "\n";
+			}
+		}
+	}
+}
+
+\om3\tools\schema_read_probe\main::run();

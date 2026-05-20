@@ -1,0 +1,27 @@
+namespace om3\tools\nullable_string_source_ternary_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$sql_type ?string = null;
+		$type_name string = "string";
+
+		echo "start\n";
+		$value = (($sql_type !== null && $sql_type !== "") ? $sql_type : $type_name);
+		echo "selected=", $value, "\n";
+		echo "mapped=", self::map_like_builder($value), "\n";
+		echo "done\n";
+	}
+
+	private static function map_like_builder(string $type_name): string
+	{
+		$type_key = strtolower(trim($type_name));
+		if ($type_key === "") {
+			return "varchar";
+		}
+		return $type_key;
+	}
+}
+
+\om3\tools\nullable_string_source_ternary_repro\main::run();

@@ -1,0 +1,12 @@
+namespace om3\tools\str_contains_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$out = str_contains("alpha(beta)", "(") ? "yes" : "no";
+		echo "contains=", $out, "\n";
+	}
+}
+
+\om3\tools\str_contains_repro\main::run();

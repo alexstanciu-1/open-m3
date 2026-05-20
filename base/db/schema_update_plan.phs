@@ -1,0 +1,32 @@
+namespace om3\base\db;
+
+/** @lib-export */
+class schema_update_plan
+{
+	public ?db_database $current = null;
+	public ?db_database $desired = null;
+	public $executable_operations vector<schema_update_operation> = [];
+	public $proposal_operations vector<schema_update_operation> = [];
+	public $warnings vector<schema_update_warning> = [];
+	public $unsupported_differences vector<schema_update_warning> = [];
+
+	public function add_executable(schema_update_operation $operation): void
+	{
+		$this->executable_operations[] = $operation;
+	}
+
+	public function add_proposal(schema_update_operation $operation): void
+	{
+		$this->proposal_operations[] = $operation;
+	}
+
+	public function add_warning(schema_update_warning $warning): void
+	{
+		$this->warnings[] = $warning;
+	}
+
+	public function add_unsupported(schema_update_warning $warning): void
+	{
+		$this->unsupported_differences[] = $warning;
+	}
+}

@@ -1,0 +1,104 @@
+namespace om3\tools\root_table_name_perf_repro;
+
+class main
+{
+	public static function run(): void
+	{
+		$path ?string = "Omi/Address";
+		$legacy_full_support = true;
+
+		echo "explode_only:start\n";
+		$started = php::microtime(true);
+		for ($i = 0; $i < 10000; $i++) {
+			$parts = explode("/", (string) $path);
+			$last string = (string) $parts[count($parts) - 1];
+			if ($last === "") {
+				echo "never\n";
+			}
+		}
+		$ended = php::microtime(true);
+		echo "explode_only:done:", number_format($ended - $started, 6, ".", ""), "\n";
+
+		echo "normalize_no_loop:start\n";
+		$started = php::microtime(true);
+		for ($i = 0; $i < 10000; $i++) {
+			$table = self::normalize_legacy_db_name_local_no_loop("Address");
+			if ($table === "") {
+				echo "never\n";
+			}
+		}
+		$ended = php::microtime(true);
+		echo "normalize_no_loop:done:", number_format($ended - $started, 6, ".", ""), "\n";
+
+		echo "starts_with_tail:start\n";
+		$started = php::microtime(true);
+		for ($i = 0; $i < 10000; $i++) {
+			$out = "Address";
+			if (str_starts_with($out, "_")) {
+				$out = substr($out, 1);
+			}
+			if ($out === "") {
+				echo "never\n";
+			}
+		}
+		$ended = php::microtime(true);
+		echo "starts_with_tail:done:", number_format($ended - $started, 6, ".", ""), "\n";
+
+		echo "combined:start\n";
+		$started = php::microtime(true);
+		for ($i = 0; $i < 10000; $i++) {
+			$table = self::resolve_like_builder($path, $legacy_full_support);
+			if ($table === "") {
+				echo "never\n";
+			}
+		}
+		$ended = php::microtime(true);
+		echo "combined:done:", number_format($ended - $started, 6, ".", ""), "\n";
+	}
+
+	private static function resolve_like_builder(?string $path, bool $legacy_full_support): ?string
+	{
+		if ($path === null || $path === "") {
+			return null;
+		}
+		$parts = explode("/", $path);
+		if (count($parts) <= 0) {
+			return $legacy_full_support ? ("$" . self::normalize_legacy_db_name_local($path)) : self::normalize_legacy_db_name_local($path);
+		}
+		$last string = (string) $parts[count($parts) - 1];
+		return $legacy_full_support ? ("$" . self::normalize_legacy_db_name_local($last)) : self::normalize_legacy_db_name_local($last);
+	}
+
+	private static function normalize_legacy_db_name_local(string $name): string
+	{
+		$out = trim($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		$out = str_replace("$", "", $out);
+		while (strpos($out, "__") !== false) {
+			$out = str_replace("__", "_", $out);
+		}
+		if (str_starts_with($out, "_")) {
+			$out = substr($out, 1);
+		}
+		return $out;
+	}
+
+	private static function normalize_legacy_db_name_local_no_loop(string $name): string
+	{
+		$out = trim($name);
+		$out = str_replace("\\", "_", $out);
+		$out = str_replace("/", "_", $out);
+		$out = str_replace(".", "_", $out);
+		$out = str_replace("-", "_", $out);
+		$out = str_replace("$", "", $out);
+		if (str_starts_with($out, "_")) {
+			$out = substr($out, 1);
+		}
+		return $out;
+	}
+}
+
+\om3\tools\root_table_name_perf_repro\main::run();
