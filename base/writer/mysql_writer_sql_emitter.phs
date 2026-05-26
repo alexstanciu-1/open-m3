@@ -1,0 +1,408 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class mysql_writer_sql_emitter
+{
+	public int $row_batch_chunk_size = 1000;
+	public int $link_batch_chunk_size = 1000;
+	public int $next_simulated_insert_id = 2000000;
+
+	public function emit_row_batch(writer_sql_batch $batch): vector<string>
+	{
+		if ($batch->action === "update") {
+			return $this->emit_upsert_batch($batch);
+		}
+
+		return $this->emit_insert_batch($batch);
+	}
+
+	public function emit_row_batches(vector<writer_sql_batch> $batches): vector<string>
+	{
+		$sql vector<string> = [];
+		$batch_list = $batches;
+		foreach ($batch_list as $batch) {
+			$statements = $this->emit_row_batch($batch);
+			$statement_list = $statements;
+			foreach ($statement_list as $statement) {
+				$sql[] = $statement;
+			}
+		}
+		return $sql;
+	}
+
+	public function emit_link_batch(writer_link_batch $batch): vector<string>
+	{
+		if ($batch->kind === "singular_ref_update" || $batch->kind === "one_to_many_update") {
+			return $this->emit_link_update_batch($batch);
+		}
+
+		return $this->emit_link_insert_batch($batch);
+	}
+
+	public function emit_link_batches(vector<writer_link_batch> $batches): vector<string>
+	{
+		$sql vector<string> = [];
+		$batch_list = $batches;
+		foreach ($batch_list as $batch) {
+			$statements = $this->emit_link_batch($batch);
+			$statement_list = $statements;
+			foreach ($statement_list as $statement) {
+				$sql[] = $statement;
+			}
+		}
+		return $sql;
+	}
+
+	public function emit_execution_sql(vector<writer_sql_batch> $row_batches, vector<writer_link_batch> $link_batches): vector<string>
+	{
+		$sql vector<string> = [];
+
+		$row_sql = $this->emit_row_batches($row_batches);
+		$row_sql_list = $row_sql;
+		foreach ($row_sql_list as $statement) {
+			$sql[] = $statement;
+		}
+
+		$link_sql = $this->emit_link_batches($link_batches);
+		$link_sql_list = $link_sql;
+		foreach ($link_sql_list as $statement) {
+			$sql[] = $statement;
+		}
+
+		return $sql;
+	}
+
+	public function emit_row_execution_statements(vector<writer_sql_batch> $batches): vector<writer_sql_execution_statement>
+	{
+		$statements vector<writer_sql_execution_statement> = [];
+		$batch_list = $batches;
+		foreach ($batch_list as $batch) {
+			$batch_statements = $this->emit_row_execution_statement_batch($batch);
+			$statement_list = $batch_statements;
+			foreach ($statement_list as $statement) {
+				$statements[] = $statement;
+			}
+		}
+		return $statements;
+	}
+
+	public function simulate_id_bridge(vector<writer_sql_execution_statement> $statements): writer_id_bridge_result
+	{
+		$result = new writer_id_bridge_result();
+		$statement_list = $statements;
+
+		foreach ($statement_list as $statement) {
+			if ($statement->kind !== "row_insert") {
+				continue;
+			}
+			if ($statement->simulated_first_insert_id === null) {
+				continue;
+			}
+
+			$real_id = (int) $statement->simulated_first_insert_id;
+			$row_placeholder_lists = $statement->row_placeholder_ids;
+			foreach ($row_placeholder_lists as $placeholder_list) {
+				foreach ($placeholder_list as $placeholder_id) {
+					$result->resolved_ids[(string) $placeholder_id] = $real_id;
+				}
+				$real_id = $real_id + 1;
+			}
+		}
+
+		return $result;
+	}
+
+	public function emit_insert_batch(writer_sql_batch $batch): vector<string>
+	{
+		$field_sql = $this->quote_identifier_list($batch->fields);
+		$statements vector<string> = [];
+		$row_chunks = $this->chunk_row_values($batch->row_values, $this->row_batch_chunk_size);
+		$chunk_list = $row_chunks;
+
+		foreach ($chunk_list as $chunk_rows) {
+			$value_sql = $this->emit_values_sql($chunk_rows);
+			$statements[] = "INSERT INTO " . $this->quote_identifier($batch->table_name) .
+				" (" . implode(", ", $field_sql) . ")" .
+				" VALUES " . $value_sql . ";";
+		}
+
+		return $statements;
+	}
+
+	public function emit_row_execution_statement_batch(writer_sql_batch $batch): vector<writer_sql_execution_statement>
+	{
+		$statements vector<writer_sql_execution_statement> = [];
+		$field_sql = $this->quote_identifier_list($batch->fields);
+		$row_chunks = $this->chunk_row_values($batch->row_values, $this->row_batch_chunk_size);
+		$id_chunks = $this->chunk_placeholder_ids($batch->placeholder_ids, $this->row_batch_chunk_size);
+		$chunk_count = count($row_chunks);
+
+		for ($chunk_index = 0; $chunk_index < $chunk_count; $chunk_index++) {
+			$chunk_rows = $row_chunks[$chunk_index];
+			$chunk_ids vector<int> = [];
+			if ($chunk_index < count($id_chunks)) {
+				$chunk_ids = $id_chunks[$chunk_index];
+			}
+
+			$statement = new writer_sql_execution_statement();
+			$statement->table_name = $batch->table_name;
+			$statement->placeholder_ids = $chunk_ids;
+
+			if ($batch->action === "update") {
+				$statement->kind = "row_upsert";
+				$update_sql vector<string> = [];
+				foreach ($batch->set_fields as $field_name) {
+					$quoted = $this->quote_identifier($field_name);
+					$update_sql[] = $quoted . " = VALUES(" . $quoted . ")";
+				}
+				$value_sql = $this->emit_values_sql($chunk_rows);
+				$statement->sql = "INSERT INTO " . $this->quote_identifier($batch->table_name) .
+					" (" . implode(", ", $field_sql) . ")" .
+					" VALUES " . $value_sql .
+					" ON DUPLICATE KEY UPDATE " . implode(", ", $update_sql) . ";";
+			} else {
+				$statement->kind = "row_insert";
+				$value_sql = $this->emit_values_sql($chunk_rows);
+				$statement->sql = "INSERT INTO " . $this->quote_identifier($batch->table_name) .
+					" (" . implode(", ", $field_sql) . ")" .
+					" VALUES " . $value_sql . ";";
+				$statement->row_signatures = $this->slice_row_signatures($batch->row_signatures, $chunk_index, count($chunk_rows));
+				$statement->row_placeholder_ids = $this->slice_row_placeholder_ids($batch, $chunk_index, count($chunk_rows));
+				if (count($statement->row_signatures) > 0) {
+					$statement->simulated_first_insert_id = $this->next_simulated_insert_id;
+					$this->next_simulated_insert_id = $this->next_simulated_insert_id + count($statement->row_signatures);
+				}
+			}
+
+			$statements[] = $statement;
+		}
+
+		return $statements;
+	}
+
+	public function emit_upsert_batch(writer_sql_batch $batch): vector<string>
+	{
+		$field_sql = $this->quote_identifier_list($batch->fields);
+		$update_sql vector<string> = [];
+		$statements vector<string> = [];
+
+		foreach ($batch->set_fields as $field_name) {
+			$quoted = $this->quote_identifier($field_name);
+			$update_sql[] = $quoted . " = VALUES(" . $quoted . ")";
+		}
+
+		$row_chunks = $this->chunk_row_values($batch->row_values, $this->row_batch_chunk_size);
+		$chunk_list = $row_chunks;
+		foreach ($chunk_list as $chunk_rows) {
+			$value_sql = $this->emit_values_sql($chunk_rows);
+			$statements[] = "INSERT INTO " . $this->quote_identifier($batch->table_name) .
+				" (" . implode(", ", $field_sql) . ")" .
+				" VALUES " . $value_sql .
+				" ON DUPLICATE KEY UPDATE " . implode(", ", $update_sql) . ";";
+		}
+
+		return $statements;
+	}
+
+	public function emit_link_insert_batch(writer_link_batch $batch): vector<string>
+	{
+		$field_sql = $this->quote_identifier_list($batch->columns);
+		$row_values = $this->collect_link_row_values($batch);
+		$row_chunks = $this->chunk_row_values($row_values, $this->link_batch_chunk_size);
+		$chunk_list = $row_chunks;
+		$statements vector<string> = [];
+
+		foreach ($chunk_list as $chunk_rows) {
+			$value_sql = $this->emit_values_sql($chunk_rows);
+			$statements[] = "INSERT IGNORE INTO " . $this->quote_identifier($batch->table_name) .
+				" (" . implode(", ", $field_sql) . ")" .
+				" VALUES " . $value_sql . ";";
+		}
+
+		return $statements;
+	}
+
+	public function emit_link_update_batch(writer_link_batch $batch): vector<string>
+	{
+		$field_names vector<string> = ["Id"];
+		foreach ($batch->columns as $column_name) {
+			$field_names[] = $column_name;
+		}
+
+		$field_sql = $this->quote_identifier_list($field_names);
+		$row_values = $this->collect_link_row_values($batch);
+		$update_sql vector<string> = [];
+		$statements vector<string> = [];
+
+		foreach ($batch->columns as $column_name) {
+			$quoted = $this->quote_identifier($column_name);
+			$update_sql[] = $quoted . " = VALUES(" . $quoted . ")";
+		}
+
+		$row_chunks = $this->chunk_row_values($row_values, $this->link_batch_chunk_size);
+		$chunk_list = $row_chunks;
+		foreach ($chunk_list as $chunk_rows) {
+			$value_sql = $this->emit_values_sql($chunk_rows);
+			$statements[] = "INSERT INTO " . $this->quote_identifier($batch->table_name) .
+				" (" . implode(", ", $field_sql) . ")" .
+				" VALUES " . $value_sql .
+				" ON DUPLICATE KEY UPDATE " . implode(", ", $update_sql) . ";";
+		}
+
+		return $statements;
+	}
+
+	public function collect_link_row_values(writer_link_batch $batch): vector<vector<mixed>>
+	{
+		$values vector<vector<mixed>> = [];
+
+		foreach ($batch->rows as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			$row_values vector<mixed> = [];
+
+			if ($batch->kind === "singular_ref_update" || $batch->kind === "one_to_many_update") {
+				$row_values[] = (isset($row_hash["Id"]) ? $row_hash["Id"] : null);
+			}
+
+			foreach ($batch->columns as $column_name) {
+				$row_values[] = (isset($row_hash[$column_name]) ? $row_hash[$column_name] : null);
+			}
+
+			$values[] = $row_values;
+		}
+
+		return $values;
+	}
+
+	public function slice_row_signatures(vector<string> $row_signatures, int $chunk_index, int $chunk_size): vector<string>
+	{
+		$result vector<string> = [];
+		$start = $chunk_index * $this->row_batch_chunk_size;
+		for ($index = 0; $index < $chunk_size; $index++) {
+			$row_index = $start + $index;
+			if ($row_index >= count($row_signatures)) {
+				break;
+			}
+			$result[] = $row_signatures[$row_index];
+		}
+		return $result;
+	}
+
+	public function slice_row_placeholder_ids(writer_sql_batch $batch, int $chunk_index, int $chunk_size): vector<vector<int>>
+	{
+		$result vector<vector<int>> = [];
+		$row_signatures = $this->slice_row_signatures($batch->row_signatures, $chunk_index, $chunk_size);
+
+		foreach ($row_signatures as $signature) {
+			if (isset($batch->signature_placeholder_ids[$signature])) {
+				$result[] = $batch->signature_placeholder_ids[$signature];
+			} else {
+				$empty_ids vector<int> = [];
+				$result[] = $empty_ids;
+			}
+		}
+
+		return $result;
+	}
+
+	public function emit_values_sql(vector<vector<mixed>> $rows): string
+	{
+		$row_sql vector<string> = [];
+		$row_list = $rows;
+
+		foreach ($row_list as $row_values) {
+			$value_sql vector<string> = [];
+			$row_value_list = $row_values;
+			foreach ($row_value_list as $value) {
+				$value_sql[] = $this->quote_value($value);
+			}
+			$row_sql[] = "(" . implode(", ", $value_sql) . ")";
+		}
+
+		return implode(", ", $row_sql);
+	}
+
+	public function chunk_row_values(vector<vector<mixed>> $rows, int $chunk_size): vector<vector<vector<mixed>>>
+	{
+		$chunks vector<vector<vector<mixed>>> = [];
+		$row_list = $rows;
+		$current_chunk vector<vector<mixed>> = [];
+		$current_count int = 0;
+		$effective_chunk_size = (($chunk_size > 0) ? $chunk_size : 1000);
+
+		foreach ($row_list as $row_values) {
+			$current_chunk[] = $row_values;
+			$current_count = $current_count + 1;
+			if ($current_count >= $effective_chunk_size) {
+				$chunks[] = $current_chunk;
+				$new_chunk vector<vector<mixed>> = [];
+				$current_chunk = $new_chunk;
+				$current_count = 0;
+			}
+		}
+
+		if ($current_count > 0) {
+			$chunks[] = $current_chunk;
+		}
+
+		return $chunks;
+	}
+
+	public function chunk_placeholder_ids(vector<int> $ids, int $chunk_size): vector<vector<int>>
+	{
+		$chunks vector<vector<int>> = [];
+		$id_list = $ids;
+		$current_chunk vector<int> = [];
+		$current_count int = 0;
+		$effective_chunk_size = (($chunk_size > 0) ? $chunk_size : 1000);
+
+		foreach ($id_list as $id_value) {
+			$current_chunk[] = $id_value;
+			$current_count = $current_count + 1;
+			if ($current_count >= $effective_chunk_size) {
+				$chunks[] = $current_chunk;
+				$new_chunk vector<int> = [];
+				$current_chunk = $new_chunk;
+				$current_count = 0;
+			}
+		}
+
+		if ($current_count > 0) {
+			$chunks[] = $current_chunk;
+		}
+
+		return $chunks;
+	}
+
+	public function quote_identifier_list(vector<string> $fields): vector<string>
+	{
+		$out vector<string> = [];
+		$field_list = $fields;
+		foreach ($field_list as $field_name) {
+			$out[] = $this->quote_identifier($field_name);
+		}
+		return $out;
+	}
+
+	public function quote_identifier(string $value): string
+	{
+		return "`" . str_replace("`", "``", $value) . "`";
+	}
+
+	public function quote_value(mixed $value): string
+	{
+		if ($value === null) {
+			return "NULL";
+		}
+
+		if (is_bool($value)) {
+			return ($value ? "1" : "0");
+		}
+
+		if (is_int($value) || is_float($value)) {
+			return (string) $value;
+		}
+
+		return "'" . str_replace("'", "''", (string) $value) . "'";
+	}
+}

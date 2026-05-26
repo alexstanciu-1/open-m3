@@ -1,0 +1,9 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_traversal_state
+{
+	public ?writer_request $request = null;
+	public $prepared_paths vector<writer_prepared_path> = [];
+	public $relation_candidates vector<writer_relation_candidate> = [];
+}

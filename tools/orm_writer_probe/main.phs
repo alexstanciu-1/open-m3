@@ -1,0 +1,453 @@
+namespace om3\tools\orm_writer_probe;
+
+function build_orders_selector(): \om3\base\writer\writer_selector
+{
+	$buyer_selector = new \om3\base\writer\writer_selector();
+	$buyer_selector->add_leaf("Code");
+
+	$offer_selector = new \om3\base\writer\writer_selector();
+	$offer_selector->add_leaf("Code");
+
+	$items_selector = new \om3\base\writer\writer_selector();
+	$items_selector->add_branch("Offer", $offer_selector);
+	$items_selector->add_leaf("Quantity");
+	$items_selector->add_leaf("Price");
+
+	$logs_selector = new \om3\base\writer\writer_selector();
+	$logs_selector->add_leaf("Date");
+	$logs_selector->add_leaf("Text");
+
+	$payments_selector = new \om3\base\writer\writer_selector();
+	$payments_selector->add_leaf("Date");
+	$payments_selector->add_branch("Logs", $logs_selector);
+
+	$root_selector = new \om3\base\writer\writer_selector();
+	$root_selector->add_leaf("Code");
+	$root_selector->add_leaf("Date");
+	$root_selector->add_branch("Buyer", $buyer_selector);
+	$root_selector->add_branch("Items", $items_selector);
+	$root_selector->add_branch("Payments", $payments_selector);
+	return $root_selector;
+}
+
+function build_probe_orm_root(): \om3\base\orm\orm_root
+{
+	$root = new \om3\base\orm\orm_root();
+	$root->path = "App";
+	$root->name = "App";
+	$root->is_root = true;
+
+	$orders = new \om3\base\orm\orm_node();
+	$orders->path = "App.Orders";
+	$orders->name = "Orders";
+	$orders->parent = $root;
+	$orders->is_list = true;
+	$orders_mat = new \om3\base\orm\orm_mat();
+	$orders_mat->mode = "one_to_many";
+	$orders_mat->table = "app_orders";
+	$orders_mat->owner_column = "app_id";
+	$orders_mat->id_column = "\$id";
+	$orders->mat[] = $orders_mat;
+	$orders_model = new \om3\base\schema\model();
+	$orders_storage = new \om3\base\schema\storage();
+	$orders_storage->table = "app_orders";
+	$orders_model->attached_storage = $orders_storage;
+	$orders->type_models[] = $orders_model;
+	$root->nodes[] = $orders;
+	$root->children[] = $orders;
+
+	$buyer = new \om3\base\orm\orm_node();
+	$buyer->path = "App.Orders.Buyer";
+	$buyer->name = "Buyer";
+	$buyer->parent = $orders;
+	$buyer_mat = new \om3\base\orm\orm_mat();
+	$buyer_mat->mode = "ref_column";
+	$buyer_mat->table = "app_orders";
+	$buyer_mat->id_column = "buyer_id";
+	$buyer->mat[] = $buyer_mat;
+	$buyer_model = new \om3\base\schema\model();
+	$buyer_storage = new \om3\base\schema\storage();
+	$buyer_storage->table = "buyers";
+	$buyer_model->attached_storage = $buyer_storage;
+	$buyer->type_models[] = $buyer_model;
+	$root->nodes[] = $buyer;
+	$orders->children[] = $buyer;
+
+	$items = new \om3\base\orm\orm_node();
+	$items->path = "App.Orders.Items";
+	$items->name = "Items";
+	$items->parent = $orders;
+	$items->is_list = true;
+	$items_mat = new \om3\base\orm\orm_mat();
+	$items_mat->mode = "join_table";
+	$items_mat->link_table = "order_items_link";
+	$items_mat->owner_column = "order_id";
+	$items_mat->link_left = "order_id";
+	$items_mat->id_column = "item_id";
+	$items_mat->link_right = "item_id";
+	$items->mat[] = $items_mat;
+	$items_model = new \om3\base\schema\model();
+	$items_storage = new \om3\base\schema\storage();
+	$items_storage->table = "app_order_items";
+	$items_model->attached_storage = $items_storage;
+	$items->type_models[] = $items_model;
+	$root->nodes[] = $items;
+	$orders->children[] = $items;
+
+	$offer = new \om3\base\orm\orm_node();
+	$offer->path = "App.Orders.Items.Offer";
+	$offer->name = "Offer";
+	$offer->parent = $items;
+	$offer_mat = new \om3\base\orm\orm_mat();
+	$offer_mat->mode = "ref_column";
+	$offer_mat->table = "app_order_items";
+	$offer_mat->id_column = "offer_id";
+	$offer->mat[] = $offer_mat;
+	$offer_model = new \om3\base\schema\model();
+	$offer_storage = new \om3\base\schema\storage();
+	$offer_storage->table = "offers";
+	$offer_model->attached_storage = $offer_storage;
+	$offer->type_models[] = $offer_model;
+	$root->nodes[] = $offer;
+	$items->children[] = $offer;
+
+	$payments = new \om3\base\orm\orm_node();
+	$payments->path = "App.Orders.Payments";
+	$payments->name = "Payments";
+	$payments->parent = $orders;
+	$payments->is_list = true;
+	$payments_mat = new \om3\base\orm\orm_mat();
+	$payments_mat->mode = "collection_table";
+	$payments_mat->link_table = "order_payments_link";
+	$payments_mat->owner_column = "order_id";
+	$payments_mat->link_left = "order_id";
+	$payments_mat->id_column = "payment_id";
+	$payments_mat->link_right = "payment_id";
+	$payments->mat[] = $payments_mat;
+	$payments_model = new \om3\base\schema\model();
+	$payments_storage = new \om3\base\schema\storage();
+	$payments_storage->table = "payments";
+	$payments_model->attached_storage = $payments_storage;
+	$payments->type_models[] = $payments_model;
+	$root->nodes[] = $payments;
+	$orders->children[] = $payments;
+
+	$logs = new \om3\base\orm\orm_node();
+	$logs->path = "App.Orders.Payments.Logs";
+	$logs->name = "Logs";
+	$logs->parent = $payments;
+	$logs->is_list = true;
+	$logs_mat = new \om3\base\orm\orm_mat();
+	$logs_mat->mode = "one_to_many";
+	$logs_mat->table = "payment_logs";
+	$logs_mat->owner_column = "payment_id";
+	$logs_mat->id_column = "\$id";
+	$logs->mat[] = $logs_mat;
+	$logs_model = new \om3\base\schema\model();
+	$logs_storage = new \om3\base\schema\storage();
+	$logs_storage->table = "payment_logs";
+	$logs_model->attached_storage = $logs_storage;
+	$logs->type_models[] = $logs_model;
+	$root->nodes[] = $logs;
+	$payments->children[] = $logs;
+
+	return $root;
+}
+
+function make_node(): \om3\base\writer\writer_payload_node
+{
+	return new \om3\base\writer\writer_payload_node();
+}
+
+function make_list(): \om3\base\writer\writer_payload_list
+{
+	return new \om3\base\writer\writer_payload_list();
+}
+
+function set_node_data(\om3\base\writer\writer_payload_node $node, string $key, mixed $value): void
+{
+	$data dynamic = $node->data;
+	$data[$key] = $value;
+	$node->data = $data;
+}
+
+function build_existing_rows(): hash<hash<dynamic>>
+{
+	$existing hash<hash<dynamic>> = [];
+
+	$order_rows hash<dynamic> = [];
+	$order_101 dynamic = (object) [];
+	$order_101["Id"] = 101;
+	$order_101["Code"] = "ORD-101";
+	$order_101["Date"] = "2026-05-21";
+	$order_rows["101"] = $order_101;
+
+	$order_102 dynamic = (object) [];
+	$order_102["Id"] = 102;
+	$order_102["Code"] = "ORD-102";
+	$order_102["Date"] = "2026-05-20";
+	$order_rows["102"] = $order_102;
+	$existing["App.Orders"] = $order_rows;
+
+	$buyer_rows hash<dynamic> = [];
+	$buyer_501 dynamic = (object) [];
+	$buyer_501["Id"] = 501;
+	$buyer_501["Code"] = "BUY-A";
+	$buyer_rows["501"] = $buyer_501;
+	$buyer_502 dynamic = (object) [];
+	$buyer_502["Id"] = 502;
+	$buyer_502["Code"] = "BUY-B";
+	$buyer_rows["502"] = $buyer_502;
+	$existing["App.Orders.Buyer"] = $buyer_rows;
+
+	$payment_rows hash<dynamic> = [];
+	$payment_9001 dynamic = (object) [];
+	$payment_9001["Id"] = 9001;
+	$payment_9001["Date"] = "2026-05-22";
+	$payment_rows["9001"] = $payment_9001;
+	$existing["App.Orders.Payments"] = $payment_rows;
+
+	return $existing;
+}
+
+function build_sample_orders(): \om3\base\writer\writer_payload_list
+{
+	$offer_a = make_node();
+	set_node_data($offer_a, "Code", "HOTEL-A");
+	set_node_data($offer_a, "#", 1);
+
+	$offer_b = make_node();
+	set_node_data($offer_b, "Code", "HOTEL-B");
+	set_node_data($offer_b, "#", 2);
+
+	$buyer_1 = make_node();
+	set_node_data($buyer_1, "Id", 501);
+	set_node_data($buyer_1, "Code", "BUY-A");
+
+	$buyer_2 = make_node();
+	set_node_data($buyer_2, "Id", 502);
+	set_node_data($buyer_2, "Code", "BUY-B");
+
+	$item_1 = make_node();
+	set_node_data($item_1, "Quantity", 2);
+	set_node_data($item_1, "Price", 120);
+	$item_1->nodes["Offer"] = $offer_a;
+
+	$item_2 = make_node();
+	set_node_data($item_2, "Quantity", 1);
+	set_node_data($item_2, "Price", 80);
+	$item_2->nodes["Offer"] = $offer_b;
+
+	$item_3 = make_node();
+	set_node_data($item_3, "Quantity", 3);
+	set_node_data($item_3, "Price", 50);
+	$item_3->nodes["Offer"] = $offer_a;
+
+	$items_1 = make_list();
+	$items_1->items[] = $item_1;
+	$items_1->items[] = $item_2;
+
+	$items_2 = make_list();
+	$items_2->items[] = $item_3;
+
+	$log_1 = make_node();
+	set_node_data($log_1, "Date", "2026-05-22 10:00:00");
+	set_node_data($log_1, "Text", "created");
+
+	$logs = make_list();
+	$logs->items[] = $log_1;
+
+	$payment_1 = make_node();
+	set_node_data($payment_1, "Id", 9001);
+	set_node_data($payment_1, "Date", "2026-05-22");
+	$payment_1->lists["Logs"] = $logs;
+
+	$payments_1 = make_list();
+	$payments_1->items[] = $payment_1;
+
+	$payments_2 = make_list();
+
+	$order_1 = make_node();
+	set_node_data($order_1, "Id", 101);
+	set_node_data($order_1, "Code", "ORD-101");
+	set_node_data($order_1, "Date", "2026-05-21");
+	$order_1->nodes["Buyer"] = $buyer_1;
+	$order_1->lists["Items"] = $items_1;
+	$order_1->lists["Payments"] = $payments_1;
+	set_node_data($order_1, "$$", (object) ["decision" => "pending"]);
+
+	$order_2 = make_node();
+	set_node_data($order_2, "Id", 102);
+	set_node_data($order_2, "Code", "ORD-102");
+	set_node_data($order_2, "Date", "2026-05-22");
+	$order_2->nodes["Buyer"] = $buyer_2;
+	$order_2->lists["Items"] = $items_2;
+	$order_2->lists["Payments"] = $payments_2;
+
+	$orders = make_list();
+	$orders->items[] = $order_1;
+	$orders->items[] = $order_2;
+	return $orders;
+}
+
+function run_explicit_selector_case(): void
+{
+	$request = new \om3\base\writer\writer_request();
+	$request->starting_point = "App.Orders";
+	$request->data = build_sample_orders();
+	$request->selector = build_orders_selector();
+	$request->orm_root = build_probe_orm_root();
+	$request->anchor["ctx"] = (object) ["root" => "App", "id" => 1];
+
+	$writer = new \om3\base\writer\orm_writer();
+	echo "==explicit_selector==\n";
+	$writer->run_bucket_probe($request);
+	echo "==prepared_paths==\n";
+	$prepared = $writer->collect_prepared_paths($request);
+	foreach ($prepared as $prepared_path) {
+		echo "path=", $prepared_path->path, "|fields=", (string) count($prepared_path->scalar_fields), "|rows=", (string) count($prepared_path->rows), "|with_id=", (string) $prepared_path->rows_with_id, "|without_id=", (string) $prepared_path->rows_without_id, "\n";
+		foreach ($prepared_path->scalar_fields as $field_name) {
+			echo "field=", $field_name, "\n";
+		}
+	}
+	echo "==read_groups==\n";
+	$read_groups = $writer->collect_read_groups($request);
+	foreach ($read_groups as $group) {
+		echo "path=", $group->path, "|ids=", (string) count($group->ids), "\n";
+		foreach ($group->ids as $id) {
+			echo "id=", (string) $id, "\n";
+		}
+	}
+	echo "==read_plans==\n";
+	$read_plans = $writer->collect_read_plans($request);
+	foreach ($read_plans as $plan) {
+		echo "path=", $plan->path, "|ids=", (string) count($plan->ids), "|fields=", (string) count($plan->fields), "\n";
+		foreach ($plan->fields as $field_name) {
+			echo "plan_field=", $field_name, "\n";
+		}
+	}
+	echo "==row_decisions==\n";
+	$existing_rows = build_existing_rows();
+	$decisions = $writer->collect_row_decisions($request, $existing_rows);
+	foreach ($decisions as $decision) {
+		$decision_id string = "";
+		if ($decision->id !== null) {
+			$decision_id = (string) $decision->id;
+		}
+		echo "path=", $decision->path, "|id=", $decision_id, "|action=", $decision->action, "\n";
+	}
+	echo "==write_plan==\n";
+	$write_plan = $writer->collect_write_plan($request, $existing_rows);
+	foreach ($write_plan->groups as $group) {
+		echo "path=", $group->path, "|action=", $group->action, "|rows=", (string) count($group->rows), "\n";
+	}
+	echo "==relation_candidates==\n";
+	$relation_candidates = $writer->collect_relation_candidates($request);
+	foreach ($relation_candidates as $candidate) {
+		$owner_id string = "";
+		$target_id string = "";
+		if ($candidate->owner_id !== null) {
+			$owner_id = (string) $candidate->owner_id;
+		}
+		if ($candidate->target_id !== null) {
+			$target_id = (string) $candidate->target_id;
+		}
+		echo "path=", $candidate->path, "|kind=", $candidate->kind, "|table=", $candidate->table_name, "|owner=", $owner_id, "|target=", $target_id, "\n";
+		foreach ($candidate->columns as $column_name) {
+			echo "candidate_column=", $column_name, "\n";
+		}
+	}
+	echo "==sql_batches==\n";
+	$sql_batches = $writer->collect_sql_batches($request, $existing_rows);
+	foreach ($sql_batches as $batch) {
+		echo "key=", $batch->key, "|path=", $batch->path, "|action=", $batch->action, "|mat=", $batch->materialization_key, "|table=", $batch->table_name, "|fields=", (string) count($batch->fields), "|rows=", (string) count($batch->rows), "\n";
+		foreach ($batch->fields as $field_name) {
+			echo "batch_field=", $field_name, "\n";
+		}
+		foreach ($batch->key_fields as $field_name) {
+			echo "key_field=", $field_name, "\n";
+		}
+		foreach ($batch->set_fields as $field_name) {
+			echo "set_field=", $field_name, "\n";
+		}
+		echo "debug_sql=", $batch->debug_sql, "\n";
+	}
+	echo "==link_plan==\n";
+	$link_plan = $writer->collect_link_plan($request, $existing_rows);
+	foreach ($link_plan->batches as $batch) {
+		echo "key=", $batch->key, "|kind=", $batch->kind, "|table=", $batch->table_name, "|columns=", (string) count($batch->columns), "|rows=", (string) count($batch->rows), "\n";
+		foreach ($batch->columns as $column_name) {
+			echo "link_column=", $column_name, "\n";
+		}
+		echo "debug_sql=", $batch->debug_sql, "\n";
+	}
+	echo "==mysql_emit==\n";
+	$emitter = new \om3\base\writer\mysql_writer_sql_emitter();
+	$emitter->row_batch_chunk_size = 2;
+	$emitter->link_batch_chunk_size = 2;
+	$execution_plan = $writer->collect_execution_plan($request, $existing_rows, $emitter);
+	foreach ($execution_plan->row_sql as $statement) {
+		echo "row_sql=", $statement, "\n";
+	}
+	foreach ($execution_plan->final_link_sql as $statement) {
+		echo "link_sql=", $statement, "\n";
+	}
+	echo "==id_bridge==\n";
+	foreach ($execution_plan->row_execution_statements as $statement) {
+		$first_insert_id string = "";
+		if ($statement->simulated_first_insert_id !== null) {
+			$first_insert_id = (string) $statement->simulated_first_insert_id;
+		}
+		echo "exec_kind=", $statement->kind, "|table=", $statement->table_name, "|first_insert_id=", $first_insert_id, "|placeholder_ids=", (string) count($statement->placeholder_ids), "\n";
+		foreach ($statement->placeholder_ids as $placeholder_id) {
+			echo "placeholder_id=", (string) $placeholder_id, "\n";
+		}
+	}
+	if ($execution_plan->id_bridge_result !== null) {
+		foreach ($execution_plan->id_bridge_result->resolved_ids as $placeholder_id => $resolved_id) {
+		echo "bridge=", $placeholder_id, "->", (string) $resolved_id, "\n";
+		}
+	}
+	echo "==link_plan_after_bridge==\n";
+	if ($execution_plan->final_link_plan !== null) {
+		foreach ($execution_plan->final_link_plan->batches as $batch) {
+			echo "key=", $batch->key, "|kind=", $batch->kind, "|table=", $batch->table_name, "|columns=", (string) count($batch->columns), "|rows=", (string) count($batch->rows), "\n";
+			echo "debug_sql=", $batch->debug_sql, "\n";
+		}
+	}
+}
+
+function run_implicit_star_case(): void
+{
+	$request = new \om3\base\writer\writer_request();
+	$request->starting_point = null;
+	$app = make_node();
+	set_node_data($app, "Version", 10);
+	$app->lists["Orders"] = build_sample_orders();
+	$app_list = make_list();
+	$app_list->items[] = $app;
+	$request->data = $app_list;
+	$request->selector = null;
+	$request->orm_root = build_probe_orm_root();
+	$request->anchor["ctx"] = (object) ["root" => "App", "id" => 1];
+
+	$writer = new \om3\base\writer\orm_writer();
+	echo "==implicit_star==\n";
+	$prepared = $writer->prepare_request($request);
+	$prepared_starting_point string = "";
+	if ($prepared->starting_point !== null) {
+		$prepared_starting_point = $prepared->starting_point;
+	}
+	echo "starting_point=", $prepared_starting_point, "\n";
+	$selector_entry_count int = 0;
+	if ($prepared->selector !== null) {
+		$selector_entry_count = count($prepared->selector->entries);
+	}
+	echo "selector_entries=", (string) $selector_entry_count, "\n";
+	if ($prepared->selector !== null && $selector_entry_count > 0) {
+		echo "selector_first=", $prepared->selector->entries[0]->name, "\n";
+	}
+}
+
+run_explicit_selector_case();
+run_implicit_star_case();

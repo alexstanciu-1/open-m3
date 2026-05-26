@@ -1,0 +1,9 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_read_plan
+{
+	public string $path = "";
+	public $ids vector<int> = [];
+	public $fields vector<string> = [];
+}

@@ -1,0 +1,7 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_payload_list
+{
+	public $items vector<writer_payload_node> = [];
+}

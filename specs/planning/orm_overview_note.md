@@ -113,10 +113,15 @@ For the current filtered legacy-vs-new ORM comparison:
 - in-scope table parity is clean
 - in-scope column parity is clean
 - in-scope type mismatches are clean
+- live schema-update diff against the imported legacy H2B probe database is also clean
+  - `executable_ops=0`
+  - `proposal_ops=0`
+  - `warnings=0`
 
 Reference:
 
 - [new_orm_vs_legacy_schema_diff_2026_05_19.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/new_orm_vs_legacy_schema_diff_2026_05_19.md:1)
+- [orm_schema_update_direction.md](/home/alexv/__AI/open_m3/open_m3_01/specs/planning/orm_schema_update_direction.md:1)
 
 ## Read Next
 

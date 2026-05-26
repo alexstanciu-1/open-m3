@@ -1,0 +1,7 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_write_plan
+{
+	public $groups vector<writer_write_group> = [];
+}

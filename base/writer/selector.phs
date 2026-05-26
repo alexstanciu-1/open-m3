@@ -1,0 +1,28 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_selector
+{
+	public $entries vector<writer_selector_entry> = [];
+
+	public function add_leaf(string $name): void
+	{
+		$entry = new writer_selector_entry();
+		$entry->name = $name;
+		$entry->children = null;
+		$this->entries[] = $entry;
+	}
+
+	public function add_branch(string $name, writer_selector $children): void
+	{
+		$entry = new writer_selector_entry();
+		$entry->name = $name;
+		$entry->children = $children;
+		$this->entries[] = $entry;
+	}
+
+	public function is_empty(): bool
+	{
+		return count($this->entries) === 0;
+	}
+}

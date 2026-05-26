@@ -1,0 +1,7 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_link_plan
+{
+	public $batches vector<writer_link_batch> = [];
+}

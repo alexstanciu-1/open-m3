@@ -1,0 +1,12 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_link_batch
+{
+	public string $key = "";
+	public string $kind = "";
+	public string $table_name = "";
+	public $columns vector<string> = [];
+	public $rows vector<dynamic> = [];
+	public string $debug_sql = "";
+}

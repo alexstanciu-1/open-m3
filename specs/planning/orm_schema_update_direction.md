@@ -1,6 +1,6 @@
 # Open M3 ORM Schema Update Direction
 
-Status: planning draft
+Status: current working direction
 
 Purpose: define how Open M3 should move from:
 
@@ -24,6 +24,36 @@ This note is not about:
 - model/materialization planning
 - query planning
 - runtime CRUD behavior
+
+## Current Implementation Status
+
+The first full schema-update slice is now implemented for the MySQL/MariaDB lane.
+
+Implemented pieces:
+
+- desired schema build into `db_database`
+- live MySQL/MariaDB schema read into `db_database`
+- explicit `schema_update_plan`
+- executable vs proposal-only operation split
+- SQL emission for both full-create and update-plan flows
+- H2B compatibility policy for legacy-parity comparison
+
+Main code entry points:
+
+- [mysql_schema_reader.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/mysql_schema_reader.phs:1)
+- [schema_differ.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/schema_differ.phs:1)
+- [schema_update_sql_emitter.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/schema_update_sql_emitter.phs:1)
+- [schema_live_update_probe/main.phs](/home/alexv/__AI/open_m3/open_m3_01/tools/schema_live_update_probe/main.phs:1)
+- [h2b_compatibility_policy.phs](/home/alexv/__AI/open_m3/open_m3_01/base/db/h2b_compatibility_policy.phs:1)
+
+Current verified H2B legacy result:
+
+- `current_tables=188`
+- `desired_tables=188`
+- `executable_ops=0`
+- `proposal_ops=0`
+- `warnings=0`
+- `unsupported=0`
 
 ## Why This Note Exists
 
@@ -125,6 +155,8 @@ The current legacy ORM does this with:
 - `SHOW TABLE STATUS`
 
 OpenM3 does not need to copy those exact calls forever, but the first MySQL/MariaDB reader may use the same practical approach.
+
+The current implementation does use this practical approach.
 
 ## Schema Identity Rules
 
@@ -265,6 +297,20 @@ The first update-planning slice should support:
   - comment
 
 The first slice does not need to solve every advanced case before being useful.
+
+For the H2B compatibility lane, the current policy now treats these as non-semantic unless explicitly authored:
+
+- engine drift
+- charset drift
+- collation drift
+- comment drift
+- MySQL integer display width drift
+- implicit `varchar(255)` drift
+
+It also intentionally avoids SQL uniqueness by default:
+
+- legacy `storage.index = unique` is currently normalized to a plain non-unique index
+- future uniqueness behavior should be ORM-level policy, not automatic `UNIQUE KEY` emission
 
 ## Recommended First Safety Rule For Column Changes
 

@@ -1,0 +1,16 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_prepared_path
+{
+	public string $path = "";
+	public string $materialization_key = "";
+	public string $table_name = "";
+	public $scalar_fields vector<string> = [];
+	public $rows vector<dynamic> = [];
+	public $nodes vector<writer_payload_node> = [];
+	public int $rows_with_id = 0;
+	public int $rows_without_id = 0;
+	public $ids vector<int> = [];
+	public $relation_candidates vector<writer_relation_candidate> = [];
+}

@@ -1,0 +1,20 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_sql_batch
+{
+	public string $key = "";
+	public string $path = "";
+	public string $action = "";
+	public string $materialization_key = "";
+	public string $table_name = "";
+	public $fields vector<string> = [];
+	public $key_fields vector<string> = [];
+	public $set_fields vector<string> = [];
+	public $rows vector<dynamic> = [];
+	public $row_values vector<vector<mixed>> = [];
+	public $row_signatures vector<string> = [];
+	public $signature_placeholder_ids hash<vector<int>> = [];
+	public $placeholder_ids vector<int> = [];
+	public string $debug_sql = "";
+}

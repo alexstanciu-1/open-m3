@@ -1,0 +1,24 @@
+namespace om3\tools\dynamic_probe;
+
+function probe_dynamic_slot_writes(): void
+{
+	$bag dynamic = (object) ["Code" => "HOTEL-A", "Id" => 7];
+	$bag["Qty"] = 3;
+	$bag["Price"] = 120;
+
+	echo "dynamic_code=", (string) $bag["Code"], "\n";
+	echo "dynamic_qty=", (string) $bag["Qty"], "\n";
+}
+
+function probe_hash_of_dynamic(): void
+{
+	$anchor dynamic = (object) ["root" => "App", "id" => 1];
+	$bags hash<dynamic> = [];
+	$bags["anchor"] = $anchor;
+
+	echo "hash_dynamic_root=", (string) $bags["anchor"]["root"], "\n";
+	echo "hash_dynamic_id=", (string) $bags["anchor"]["id"], "\n";
+}
+
+probe_dynamic_slot_writes();
+probe_hash_of_dynamic();

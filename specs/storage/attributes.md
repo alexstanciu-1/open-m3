@@ -18,7 +18,7 @@ Storage must not cross levels or redefine structural ownership.
 | Attribute | Scope | Data Type | Purpose |
 | --- | --- | --- | --- |
 | table | type | string | Declares the primary table or equivalent materialization for a concrete model. |
-| engine | type | string | Declares the storage engine or backing persistence family. |
+| engine | type | string | Declares the storage engine or backing persistence family when explicitly authored. If omitted, the current ORM lets the target database default apply. |
 | database | type | string | Declares the target database or logical storage namespace. |
 | primary_key | type | string or string[] | Declares the primary key materialization. |
 | type_column | type | string | Declares the discriminator/type column when polymorphic materialization is used. |
@@ -70,6 +70,7 @@ Storage must not cross levels or redefine structural ownership.
 | collection defaults | Collection properties should default to `manyToMany`, except on the root model where the common default should be `oneToMany`. |
 | none materialization | A non-persisted property should be expressed as `kind: none`, not a separate skip flag. |
 | indexing | The current ORM does not emit `UNIQUE KEY`. Uniqueness must be treated as ORM-level behavior for now, with future policy intended around directives such as `mergeBy`. Storage metadata may still contain `index: unique` for legacy compatibility, but it currently normalizes to a plain non-unique index. |
+| table defaults | The current ORM only emits table `engine`, `charset`, and `collation` when they are explicitly authored. Otherwise it leaves them unset so the target database defaults apply. |
 
 ## Current ORM Rule Clarifications
 

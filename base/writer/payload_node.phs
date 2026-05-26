@@ -1,0 +1,11 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_payload_node
+{
+	public dynamic $data = (object) [];
+	public $nodes hash<writer_payload_node> = [];
+	public $lists hash<writer_payload_list> = [];
+	public string $writer_action = "";
+	public ?int $writer_resolved_id = null;
+}

@@ -1,0 +1,13 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_sql_execution_statement
+{
+	public string $kind = "";
+	public string $table_name = "";
+	public string $sql = "";
+	public $placeholder_ids vector<int> = [];
+	public $row_signatures vector<string> = [];
+	public $row_placeholder_ids vector<vector<int>> = [];
+	public ?int $simulated_first_insert_id = null;
+}

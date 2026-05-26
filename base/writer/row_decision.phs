@@ -1,0 +1,12 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_row_decision
+{
+	public string $path = "";
+	public ?int $id = null;
+	public ?int $resolved_id = null;
+	public string $action = "";
+	public dynamic $prepared = (object) [];
+	public dynamic $existing = (object) [];
+}

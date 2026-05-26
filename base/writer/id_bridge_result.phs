@@ -1,0 +1,7 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_id_bridge_result
+{
+	public $resolved_ids hash<int> = [];
+}

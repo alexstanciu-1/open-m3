@@ -1,0 +1,12 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_relation_route
+{
+	public string $mode = "";
+	public string $table_name = "";
+	public ?string $owner_column = null;
+	public ?string $id_column = null;
+	public ?string $link_left = null;
+	public ?string $link_right = null;
+}

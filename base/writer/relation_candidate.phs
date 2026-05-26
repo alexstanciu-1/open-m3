@@ -1,0 +1,17 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_relation_candidate
+{
+	public string $path = "";
+	public string $kind = "";
+	public string $mode = "";
+	public string $table_name = "";
+	public $columns vector<string> = [];
+	public ?string $owner_column = null;
+	public ?string $id_column = null;
+	public ?int $owner_id = null;
+	public ?int $target_id = null;
+	public ?writer_payload_node $owner_node = null;
+	public ?writer_payload_node $target_node = null;
+}

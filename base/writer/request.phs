@@ -1,0 +1,11 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_request
+{
+	public ?writer_payload_list $data = null;
+	public ?writer_selector $selector = null;
+	public ?string $starting_point = null;
+	public ?\om3\base\orm\orm_root $orm_root = null;
+	public $anchor hash<dynamic> = [];
+}

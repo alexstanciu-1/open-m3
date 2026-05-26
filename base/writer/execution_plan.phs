@@ -1,0 +1,13 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_execution_plan
+{
+	public $row_batches vector<writer_sql_batch> = [];
+	public ?writer_link_plan $initial_link_plan = null;
+	public $row_execution_statements vector<writer_sql_execution_statement> = [];
+	public ?writer_id_bridge_result $id_bridge_result = null;
+	public ?writer_link_plan $final_link_plan = null;
+	public $row_sql vector<string> = [];
+	public $final_link_sql vector<string> = [];
+}

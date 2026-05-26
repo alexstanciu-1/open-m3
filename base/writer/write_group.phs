@@ -1,0 +1,11 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_write_group
+{
+	public string $path = "";
+	public string $materialization_key = "";
+	public string $table_name = "";
+	public string $action = "";
+	public $rows vector<dynamic> = [];
+}

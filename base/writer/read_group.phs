@@ -1,0 +1,8 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class writer_read_group
+{
+	public string $path = "";
+	public $ids vector<int> = [];
+}

@@ -72,8 +72,10 @@ Storage must not cross levels or redefine ownership.
 | Shared storage for abstract targets | When a property references an abstract model, derived concrete types should ideally materialize together for performance and simpler querying. |
 | Keep storage-specific data local | Column names, join tables, indexes, and storage engine details should stay in storage metadata only. |
 | Keep indexing unified | The current ORM intentionally does not emit `UNIQUE KEY`. If legacy metadata expresses `index: unique`, Open M3 currently keeps it only as compatibility input and materializes a plain non-unique index instead. Future uniqueness behavior should live at ORM policy level rather than direct SQL uniqueness by default. |
+| Let DB defaults work | Engine, charset, and collation should only be emitted when explicitly authored. Otherwise the current ORM should leave them unset and let the target database defaults apply. |
 | Let the ORM plan relationships | Relation type should be chosen by the ORM from the model shape by default, while explicit relation metadata may refine oneToOne, oneToMany, or manyToMany naming details when needed. |
 | Default collection planning carefully | Collection properties should default to many-to-many, except on the root model where the common default should be one-to-many. |
+| Keep object collections unique | Collections of objects should be unique by default. The same object should not appear twice in the same object collection. This matches the practical legacy ORM behavior, avoids duplicate relation rows, and is the most sensible default for relational linking. Scalar collection duplicate behavior should be reviewed separately before being treated as final. |
 | Move UI hints out | View/editor/popup/layout hints encoded in legacy storage metadata should move to view metadata in Open M3. |
 | Move semantic structure up | Structure currently inferred from storage conventions should become explicit in model metadata in Open M3. |
 

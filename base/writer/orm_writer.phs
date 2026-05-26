@@ -1,0 +1,1251 @@
+namespace om3\base\writer;
+
+/** @lib-export */
+class orm_writer
+{
+	public $trace vector<string> = [];
+
+	public function prepare_request(writer_request $request): writer_request
+	{
+		$needs_default_starting_point bool = false;
+		if ($request->starting_point === null) {
+			$needs_default_starting_point = true;
+		} else if (trim($request->starting_point) === "") {
+			$needs_default_starting_point = true;
+		}
+
+		if ($needs_default_starting_point) {
+			$request->starting_point = "App";
+		}
+
+		if ($request->selector === null) {
+			$request->selector = self::build_implicit_star_selector();
+			$this->trace[] = "selector=implicit_star";
+		}
+
+		return $request;
+	}
+
+	public static function build_implicit_star_selector(): writer_selector
+	{
+		$selector = new writer_selector();
+		$selector->add_leaf("*");
+		return $selector;
+	}
+
+	public function build_root_bucket(writer_request $request): writer_bucket_entry
+	{
+		$prepared = $this->prepare_request($request);
+		$entry = new writer_bucket_entry();
+		$entry->selector = $prepared->selector;
+		$entry->path = (string) $prepared->starting_point;
+		$entry->anchor = $prepared->anchor;
+		if ($prepared->data !== null) {
+			$entry->values = self::normalize_root_values($prepared->data);
+		}
+		return $entry;
+	}
+
+	public function run_bucket_probe(writer_request $request): void
+	{
+		$root_entry = $this->build_root_bucket($request);
+		$bucket vector<writer_bucket_entry> = [$root_entry];
+		$level int = 0;
+
+		while (count($bucket) > 0) {
+			echo "level=", (string) $level, "\n";
+			$next vector<writer_bucket_entry> = [];
+
+			foreach ($bucket as $entry) {
+				$selector = $entry->selector;
+				if ($selector === null) {
+					continue;
+				}
+
+				echo "bucket:path=", $entry->path, "|values=", (string) count($entry->values), "\n";
+				foreach ($selector->entries as $selector_entry) {
+					$has_children bool = false;
+					if ($selector_entry->children !== null) {
+						$has_children = !$selector_entry->children->is_empty();
+					}
+					echo "selector:name=", $selector_entry->name, "|has_children=", ($has_children ? "1" : "0"), "\n";
+
+					$child_values vector<writer_payload_node> = [];
+					if ($has_children) {
+						foreach ($entry->values as $value) {
+							self::append_child_values($child_values, $value, $selector_entry->name);
+						}
+					}
+
+					if ($has_children && count($child_values) > 0) {
+						$child_entry = new writer_bucket_entry();
+						$child_entry->selector = $selector_entry->children;
+						$child_entry->path = $entry->path . "." . $selector_entry->name;
+						$child_entry->anchor = $entry->anchor;
+						$child_entry->values = $child_values;
+						$next[] = $child_entry;
+					}
+				}
+			}
+
+			$bucket = $next;
+			$level = $level + 1;
+		}
+	}
+
+	public function collect_prepared_paths(writer_request $request): vector<writer_prepared_path>
+	{
+		$state = $this->collect_traversal_state($request);
+		return $state->prepared_paths;
+	}
+
+	public function collect_relation_candidates(writer_request $request): vector<writer_relation_candidate>
+	{
+		$state = $this->collect_traversal_state($request);
+		return $state->relation_candidates;
+	}
+
+	public function collect_traversal_state(writer_request $request): writer_traversal_state
+	{
+		$root_entry = $this->build_root_bucket($request);
+		$bucket vector<writer_bucket_entry> = [$root_entry];
+		$state = new writer_traversal_state();
+		$state->request = $request;
+
+		while (count($bucket) > 0) {
+			$next vector<writer_bucket_entry> = [];
+
+			foreach ($bucket as $entry) {
+				$selector = $entry->selector;
+				if ($selector === null) {
+					continue;
+				}
+
+				$prepared_path = self::build_prepared_path($request, $entry);
+				if (count($prepared_path->rows) > 0 || count($prepared_path->scalar_fields) > 0) {
+					$state->prepared_paths[] = $prepared_path;
+				}
+
+				foreach ($selector->entries as $selector_entry) {
+					$has_children bool = false;
+					if ($selector_entry->children !== null) {
+						$has_children = !$selector_entry->children->is_empty();
+					}
+
+					$child_values vector<writer_payload_node> = [];
+					if ($has_children) {
+						foreach ($entry->values as $value) {
+							self::append_child_values($child_values, $value, $selector_entry->name);
+						}
+					}
+
+					if ($has_children) {
+						$relation_candidates = self::collect_selector_relation_candidates($request, $entry, $selector_entry);
+						foreach ($relation_candidates as $candidate) {
+							$prepared_path->relation_candidates[] = $candidate;
+							$state->relation_candidates[] = $candidate;
+						}
+					}
+
+					if ($has_children && count($child_values) > 0) {
+						$child_entry = new writer_bucket_entry();
+						$child_entry->selector = $selector_entry->children;
+						$child_entry->path = $entry->path . "." . $selector_entry->name;
+						$child_entry->anchor = $entry->anchor;
+						$child_entry->values = $child_values;
+						$next[] = $child_entry;
+					}
+				}
+			}
+
+			$bucket = $next;
+		}
+
+		return $state;
+	}
+
+	public function collect_read_groups(writer_request $request): vector<writer_read_group>
+	{
+		$prepared_paths = $this->collect_prepared_paths($request);
+		$groups vector<writer_read_group> = [];
+
+		foreach ($prepared_paths as $prepared_path) {
+			if (count($prepared_path->ids) === 0) {
+				continue;
+			}
+
+			$group = new writer_read_group();
+			$group->path = $prepared_path->path;
+			$group->ids = $prepared_path->ids;
+			$groups[] = $group;
+		}
+
+		return $groups;
+	}
+
+	public function collect_read_plans(writer_request $request): vector<writer_read_plan>
+	{
+		$prepared_paths = $this->collect_prepared_paths($request);
+		$plans vector<writer_read_plan> = [];
+
+		foreach ($prepared_paths as $prepared_path) {
+			if (count($prepared_path->ids) === 0) {
+				continue;
+			}
+
+			$plan = new writer_read_plan();
+			$plan->path = $prepared_path->path;
+			$plan->ids = $prepared_path->ids;
+
+			$fields vector<string> = [];
+			$fields[] = "Id";
+			foreach ($prepared_path->scalar_fields as $field_name) {
+				if ($field_name === "*" || $field_name === "Id") {
+					continue;
+				}
+				$fields[] = $field_name;
+			}
+			$plan->fields = $fields;
+			$plans[] = $plan;
+		}
+
+		return $plans;
+	}
+
+	public function collect_row_decisions(writer_request $request, hash<hash<dynamic>> $existing_by_path): vector<writer_row_decision>
+	{
+		$prepared_paths = $this->collect_prepared_paths($request);
+		$decisions vector<writer_row_decision> = [];
+		$next_insert_id int = 1000000;
+
+		foreach ($prepared_paths as $prepared_path) {
+			foreach ($prepared_path->rows as $row_index => $row) {
+				$decision = new writer_row_decision();
+				$decision->path = $prepared_path->path;
+				$node = $prepared_path->nodes[$row_index];
+
+				$row_hash hash<mixed> = to_hash($row);
+				$row_id = self::extract_row_id($row_hash);
+				$decision->id = $row_id;
+
+				if ($row_id === null) {
+					$decision->action = "insert";
+					$existing_resolved_id = self::extract_node_meta_resolved_id($node);
+					if ($existing_resolved_id !== null) {
+						$decision->resolved_id = $existing_resolved_id;
+					} else {
+						$decision->resolved_id = $next_insert_id;
+					}
+					$prepared_row dynamic = $row;
+					$prepared_row["Id"] = $decision->resolved_id;
+					$decision->prepared = $prepared_row;
+					self::stamp_node_resolution($node, $decision->action, $decision->resolved_id);
+					if ($existing_resolved_id === null) {
+						$next_insert_id = $next_insert_id + 1;
+					}
+					$decisions[] = $decision;
+					continue;
+				}
+
+				$existing = self::find_existing_row($existing_by_path, $prepared_path->path, $row_id);
+				if ($existing === null) {
+					$decision->action = "insert";
+					$decision->resolved_id = $row_id;
+					$decision->prepared = $row;
+					self::stamp_node_resolution($node, $decision->action, $decision->resolved_id);
+					$decisions[] = $decision;
+					continue;
+				}
+
+				$decision->prepared = $row;
+				$decision->existing = $existing;
+				$decision->action = self::compare_row_action($row, $existing, $prepared_path->scalar_fields);
+				$decision->resolved_id = $row_id;
+				self::stamp_node_resolution($node, $decision->action, $decision->resolved_id);
+				$decisions[] = $decision;
+			}
+		}
+
+		return $decisions;
+	}
+
+	public function collect_write_plan(writer_request $request, hash<hash<dynamic>> $existing_by_path): writer_write_plan
+	{
+		$prepared_paths = $this->collect_prepared_paths($request);
+		$decisions = $this->collect_row_decisions($request, $existing_by_path);
+		$plan = new writer_write_plan();
+		$prepared_by_path hash<writer_prepared_path> = [];
+
+		foreach ($prepared_paths as $prepared_path) {
+			$prepared_by_path[$prepared_path->path] = $prepared_path;
+		}
+
+		$group_map hash<writer_write_group> = [];
+		$group_order vector<string> = [];
+
+		foreach ($decisions as $decision) {
+			if ($decision->action === "no_change") {
+				continue;
+			}
+
+			$group_key = $decision->path . "|" . $decision->action;
+			if (!isset($group_map[$group_key])) {
+				$group = new writer_write_group();
+				$group->path = $decision->path;
+				if (isset($prepared_by_path[$decision->path])) {
+					$group->materialization_key = $prepared_by_path[$decision->path]->materialization_key;
+					$group->table_name = $prepared_by_path[$decision->path]->table_name;
+				}
+				$group->action = $decision->action;
+				$group_map[$group_key] = $group;
+				$group_order[] = $group_key;
+			}
+
+			$group_map[$group_key]->rows[] = $decision->prepared;
+		}
+
+		foreach ($group_order as $group_key) {
+			$plan->groups[] = $group_map[$group_key];
+		}
+
+		return $plan;
+	}
+
+	public function collect_sql_batches(writer_request $request, hash<hash<dynamic>> $existing_by_path): vector<writer_sql_batch>
+	{
+		$write_plan = $this->collect_write_plan($request, $existing_by_path);
+		$batches vector<writer_sql_batch> = [];
+
+		foreach ($write_plan->groups as $group) {
+			$batch = new writer_sql_batch();
+			$batch->path = $group->path;
+			$batch->action = $group->action;
+			$batch->materialization_key = $group->materialization_key;
+			$batch->table_name = $group->table_name;
+			if ($batch->materialization_key === "") {
+				$batch->materialization_key = self::resolve_materialization_key($group->path);
+			}
+			if ($batch->table_name === "") {
+				$batch->table_name = self::resolve_table_name($batch->materialization_key);
+			}
+			$batch->key = self::build_batch_key($group->path, $batch->materialization_key, $batch->table_name, $group->action);
+			$batch->fields = self::collect_group_fields($group);
+			$batch->key_fields = self::collect_key_fields($batch);
+			$batch->set_fields = self::collect_set_fields($batch);
+			$batch->rows = self::normalize_group_rows($group, $batch->fields);
+			if ($batch->action === "insert") {
+				$batch->rows = self::dedupe_batch_rows($batch->rows, $batch->fields);
+			}
+			$batch->placeholder_ids = self::collect_group_placeholder_ids($group);
+			$batch->row_signatures = self::collect_row_signatures($batch->rows, $batch->fields);
+			$batch->signature_placeholder_ids = self::collect_signature_placeholder_ids($group, $batch->rows, $batch->fields);
+			$batch->row_values = self::collect_row_values($batch->rows, $batch->fields);
+			$batch->debug_sql = self::build_debug_sql($batch);
+			$batches[] = $batch;
+		}
+
+		return $batches;
+	}
+
+	public function collect_link_plan(writer_request $request, hash<hash<dynamic>> $existing_by_path): writer_link_plan
+	{
+		$link_plan = new writer_link_plan();
+		$this->collect_row_decisions($request, $existing_by_path);
+		$candidates = $this->collect_relation_candidates($request);
+		$batch_map hash<writer_link_batch> = [];
+		$batch_order vector<string> = [];
+
+		foreach ($candidates as $candidate) {
+			if ($candidate->owner_id === null && $candidate->owner_node !== null) {
+				$candidate->owner_id = self::extract_node_resolved_id($candidate->owner_node);
+			}
+			if ($candidate->target_id === null && $candidate->target_node !== null) {
+				$candidate->target_id = self::extract_node_resolved_id($candidate->target_node);
+			}
+
+			if ($candidate->owner_id === null || $candidate->target_id === null) {
+				continue;
+			}
+
+			$batch_key = self::build_link_batch_key($candidate);
+			if (!isset($batch_map[$batch_key])) {
+				$batch = new writer_link_batch();
+				$batch->key = $batch_key;
+				$batch->kind = $candidate->kind;
+				$batch->table_name = $candidate->table_name;
+				$batch->columns = $candidate->columns;
+				$batch_map[$batch_key] = $batch;
+				$batch_order[] = $batch_key;
+			}
+
+			$row dynamic = (object) [];
+			if ($candidate->kind === "singular_ref_update") {
+				$row["Id"] = $candidate->owner_id;
+				if (count($candidate->columns) > 0) {
+					$row[$candidate->columns[0]] = $candidate->target_id;
+				}
+			} else if ($candidate->kind === "one_to_many_update") {
+				$row["Id"] = $candidate->target_id;
+				if (count($candidate->columns) > 0) {
+					$row[$candidate->columns[0]] = $candidate->owner_id;
+				}
+			} else {
+				if (count($candidate->columns) > 0) {
+					$row[$candidate->columns[0]] = $candidate->owner_id;
+				}
+				if (count($candidate->columns) > 1) {
+					$row[$candidate->columns[1]] = $candidate->target_id;
+				}
+			}
+
+			$batch_map[$batch_key]->rows[] = $row;
+		}
+
+		foreach ($batch_order as $batch_key) {
+			$batch = $batch_map[$batch_key];
+			if (count($batch->rows) === 0) {
+				continue;
+			}
+			$batch->rows = self::dedupe_link_rows($batch->rows, $batch->columns, $batch->kind);
+			if (count($batch->rows) === 0) {
+				continue;
+			}
+			$batch->debug_sql = self::build_link_debug_sql($batch);
+			$link_plan->batches[] = $batch;
+		}
+
+		return $link_plan;
+	}
+
+	public function collect_execution_plan(writer_request $request, hash<hash<dynamic>> $existing_by_path, mysql_writer_sql_emitter $emitter): writer_execution_plan
+	{
+		$plan = new writer_execution_plan();
+		$plan->row_batches = $this->collect_sql_batches($request, $existing_by_path);
+		$plan->initial_link_plan = $this->collect_link_plan($request, $existing_by_path);
+		$plan->row_sql = $emitter->emit_row_batches($plan->row_batches);
+		$plan->row_execution_statements = $emitter->emit_row_execution_statements($plan->row_batches);
+		$plan->id_bridge_result = $emitter->simulate_id_bridge($plan->row_execution_statements);
+		$this->apply_id_bridge_result($request, $plan->id_bridge_result);
+		$plan->final_link_plan = $this->collect_link_plan($request, $existing_by_path);
+		if ($plan->final_link_plan !== null) {
+			$plan->final_link_sql = $emitter->emit_link_batches($plan->final_link_plan->batches);
+		}
+		return $plan;
+	}
+
+	public function apply_id_bridge_result(writer_request $request, writer_id_bridge_result $bridge_result): void
+	{
+		$state = $this->collect_traversal_state($request);
+		$prepared_paths = $state->prepared_paths;
+
+		foreach ($prepared_paths as $prepared_path) {
+			foreach ($prepared_path->nodes as $node) {
+				$current_id = self::extract_node_resolved_id($node);
+				if ($current_id === null) {
+					continue;
+				}
+				$current_key = (string) $current_id;
+				if (!isset($bridge_result->resolved_ids[$current_key])) {
+					continue;
+				}
+
+				$resolved_id = $bridge_result->resolved_ids[$current_key];
+				self::stamp_node_resolution($node, "insert_resolved", $resolved_id);
+			}
+		}
+	}
+
+	public static function normalize_root_values(writer_payload_list $data): vector<writer_payload_node>
+	{
+		$values vector<writer_payload_node> = [];
+		foreach ($data->items as $item) {
+			$values[] = $item;
+		}
+		return $values;
+	}
+
+	public static function append_child_values(vector<writer_payload_node> &$child_values, writer_payload_node $value, string $property_name): void
+	{
+		if (isset($value->lists[$property_name])) {
+			$selected_list = $value->lists[$property_name];
+			foreach ($selected_list->items as $child) {
+				$child_values[] = $child;
+			}
+			return;
+		}
+
+		if (isset($value->nodes[$property_name])) {
+			$child_values[] = $value->nodes[$property_name];
+			return;
+		}
+	}
+
+	public static function collect_selector_relation_candidates(writer_request $request, writer_bucket_entry $entry, writer_selector_entry $selector_entry): vector<writer_relation_candidate>
+	{
+		$candidates vector<writer_relation_candidate> = [];
+		$relation_path = $entry->path . "." . $selector_entry->name;
+		$route = self::resolve_relation_route_from_request($request, $relation_path);
+		if ($route === null) {
+			return $candidates;
+		}
+
+		foreach ($entry->values as $value) {
+			if (isset($value->nodes[$selector_entry->name])) {
+				$child = $value->nodes[$selector_entry->name];
+
+				$candidate = new writer_relation_candidate();
+				$candidate->path = $relation_path;
+				$candidate->mode = $route->mode;
+				$candidate->table_name = $route->table_name;
+				$candidate->owner_column = $route->owner_column;
+				$candidate->id_column = $route->id_column;
+				$candidate->kind = ($route->mode === "ref_column") ? "singular_ref_update" : "helper_table_link";
+				if ($candidate->kind === "singular_ref_update") {
+					if ($route->id_column !== null) {
+						$candidate->columns[] = $route->id_column;
+					}
+				} else if ($route->owner_column !== null) {
+					$candidate->columns[] = $route->owner_column;
+					if ($route->id_column !== null) {
+						$candidate->columns[] = $route->id_column;
+					}
+				} else if ($route->id_column !== null) {
+					$candidate->columns[] = $route->id_column;
+				}
+				$candidate->owner_node = $value;
+				$candidate->target_node = $child;
+				$candidates[] = $candidate;
+			}
+
+			if (isset($value->lists[$selector_entry->name])) {
+				$child_list = $value->lists[$selector_entry->name];
+				foreach ($child_list->items as $child) {
+					$candidate = new writer_relation_candidate();
+					$candidate->path = $relation_path;
+					$candidate->mode = $route->mode;
+					$candidate->table_name = $route->table_name;
+					$candidate->owner_column = $route->owner_column;
+					$candidate->id_column = $route->id_column;
+					if ($route->mode === "one_to_many") {
+						$candidate->kind = "one_to_many_update";
+						if ($route->owner_column !== null) {
+							$candidate->columns[] = $route->owner_column;
+						}
+					} else {
+						$candidate->kind = "helper_table_link";
+						if ($route->owner_column !== null) {
+							$candidate->columns[] = $route->owner_column;
+						}
+						if ($route->id_column !== null) {
+							$candidate->columns[] = $route->id_column;
+						}
+					}
+					$candidate->owner_node = $value;
+					$candidate->target_node = $child;
+					$candidates[] = $candidate;
+				}
+			}
+		}
+
+		return $candidates;
+	}
+
+	public static function build_prepared_path(writer_request $request, writer_bucket_entry $entry): writer_prepared_path
+	{
+		$prepared = new writer_prepared_path();
+		$prepared->path = $entry->path;
+		$row_route = self::resolve_row_route_from_request($request, $entry->path);
+		if ($row_route !== null) {
+			$prepared->materialization_key = $row_route->table_name;
+			$prepared->table_name = $row_route->table_name;
+		} else {
+			$prepared->materialization_key = self::resolve_materialization_key($entry->path);
+			$prepared->table_name = self::resolve_table_name($prepared->materialization_key);
+		}
+
+		$selector = $entry->selector;
+		if ($selector === null) {
+			return $prepared;
+		}
+
+		$scalar_fields vector<string> = [];
+		foreach ($selector->entries as $selector_entry) {
+			if ($selector_entry->children === null) {
+				$scalar_fields[] = $selector_entry->name;
+			}
+		}
+		$prepared->scalar_fields = $scalar_fields;
+
+		foreach ($entry->values as $row_index => $value) {
+			self::stamp_prepare_meta($value, $entry->path, $row_index);
+
+			$data dynamic = $value->data;
+			$data_hash hash<mixed> = to_hash($data);
+			$row_id = self::extract_row_id($data_hash);
+			if ($row_id !== null) {
+				$prepared->rows_with_id = $prepared->rows_with_id + 1;
+				$prepared->ids[] = $row_id;
+			} else {
+				$prepared->rows_without_id = $prepared->rows_without_id + 1;
+			}
+
+			if (count($scalar_fields) === 0) {
+				continue;
+			}
+
+			$row dynamic = (object) [];
+			foreach ($scalar_fields as $field_name) {
+				if ($field_name === "*") {
+					continue;
+				}
+				if (isset($data_hash[$field_name])) {
+					$row[$field_name] = $data_hash[$field_name];
+				}
+			}
+			if ($row_id !== null) {
+				$row["Id"] = $row_id;
+			}
+			$prepared->rows[] = $row;
+			$prepared->nodes[] = $value;
+		}
+
+		return $prepared;
+	}
+
+	public static function stamp_prepare_meta(writer_payload_node $node, string $path, int $row_index): void
+	{
+		$data dynamic = $node->data;
+		$data_hash hash<mixed> = to_hash($data);
+		$meta dynamic = (isset($data_hash["$$"]) ? $data["$$"] : (object) []);
+		$meta["prepared_path"] = $path;
+		$meta["prepared_index"] = $row_index;
+		$data["$$"] = $meta;
+		$node->data = $data;
+	}
+
+	public static function extract_row_id(hash<mixed> $data): ?int
+	{
+		if (!isset($data["Id"])) {
+			return null;
+		}
+
+		$id_value = $data["Id"];
+		if ($id_value === null) {
+			return null;
+		}
+
+		return (int) $id_value;
+	}
+
+	public static function find_existing_row(hash<hash<dynamic>> $existing_by_path, string $path, int $id): ?dynamic
+	{
+		if (!isset($existing_by_path[$path])) {
+			return null;
+		}
+
+		$rows_by_id = $existing_by_path[$path];
+		$id_key = (string) $id;
+		if (!isset($rows_by_id[$id_key])) {
+			return null;
+		}
+
+		return $rows_by_id[$id_key];
+	}
+
+	public static function compare_row_action(dynamic $prepared, dynamic $existing, vector<string> $scalar_fields): string
+	{
+		$prepared_hash hash<mixed> = to_hash($prepared);
+		$existing_hash hash<mixed> = to_hash($existing);
+		$fields = $scalar_fields;
+
+		foreach ($fields as $field_name) {
+			if ($field_name === "*" || $field_name === "Id") {
+				continue;
+			}
+
+			$prepared_has = isset($prepared_hash[$field_name]);
+			$existing_has = isset($existing_hash[$field_name]);
+			if ($prepared_has !== $existing_has) {
+				return "update";
+			}
+
+			if ($prepared_has && ($prepared_hash[$field_name] != $existing_hash[$field_name])) {
+				return "update";
+			}
+		}
+
+		return "no_change";
+	}
+
+	public static function collect_group_fields(writer_write_group $group): vector<string>
+	{
+		$field_map hash<bool> = [];
+		$field_order vector<string> = [];
+
+		if ($group->action === "update") {
+			$field_map["Id"] = true;
+			$field_order[] = "Id";
+		}
+
+		foreach ($group->rows as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			foreach ($row_hash as $field_name => $value) {
+				if ($group->action === "insert" && $field_name === "Id") {
+					continue;
+				}
+				if (!isset($field_map[$field_name])) {
+					$field_map[$field_name] = true;
+					$field_order[] = $field_name;
+				}
+			}
+		}
+
+		return $field_order;
+	}
+
+	public static function normalize_group_rows(writer_write_group $group, vector<string> $fields): vector<dynamic>
+	{
+		$normalized vector<dynamic> = [];
+		$field_list = $fields;
+
+		foreach ($group->rows as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			$normalized_row dynamic = (object) [];
+			foreach ($field_list as $field_name) {
+				if (isset($row_hash[$field_name])) {
+					$normalized_row[$field_name] = $row_hash[$field_name];
+				} else {
+					$normalized_row[$field_name] = null;
+				}
+			}
+			$normalized[] = $normalized_row;
+		}
+
+		return $normalized;
+	}
+
+	public static function build_batch_key(string $path, string $materialization_key, string $table_name, string $action): string
+	{
+		return $path . "|" . $materialization_key . "|" . $table_name . "|" . $action;
+	}
+
+	public static function build_link_batch_key(writer_relation_candidate $candidate): string
+	{
+		return $candidate->table_name . "|" . implode(",", $candidate->columns) . "|" . $candidate->kind;
+	}
+
+	public static function resolve_materialization_key(string $path): string
+	{
+		return $path;
+	}
+
+	public static function resolve_table_name(string $materialization_key): string
+	{
+		$table_name = strtolower($materialization_key);
+		$table_name = str_replace("\\", "_", $table_name);
+		$table_name = str_replace("/", "_", $table_name);
+		$table_name = str_replace(".", "_", $table_name);
+		$table_name = str_replace("-", "_", $table_name);
+		return $table_name;
+	}
+
+	public static function resolve_singular_ref_column(string $property_name): string
+	{
+		$column_name = strtolower($property_name);
+		$column_name = str_replace("\\", "_", $column_name);
+		$column_name = str_replace("/", "_", $column_name);
+		$column_name = str_replace(".", "_", $column_name);
+		$column_name = str_replace("-", "_", $column_name);
+		return $column_name . "_id";
+	}
+
+	public static function resolve_relation_route_from_request(writer_request $request, string $relation_path): ?writer_relation_route
+	{
+		if ($request->orm_root === null) {
+			return null;
+		}
+
+		$node = self::find_orm_node_by_path($request->orm_root, $relation_path);
+		if ($node === null) {
+			return null;
+		}
+
+		return self::resolve_relation_route_from_node($node);
+	}
+
+	public static function resolve_row_route_from_request(writer_request $request, string $path): ?writer_relation_route
+	{
+		if ($request->orm_root === null) {
+			return null;
+		}
+
+		$node = self::find_orm_node_by_path($request->orm_root, $path);
+		if ($node === null) {
+			return null;
+		}
+
+		return self::resolve_row_route_from_node($node);
+	}
+
+	public static function resolve_row_route_from_node(\om3\base\orm\orm_node $node): ?writer_relation_route
+	{
+		$route = new writer_relation_route();
+		$route->mode = "type_table";
+
+		if (count($node->type_models) > 0) {
+			$type_model = $node->type_models[0];
+			if ($type_model->attached_storage !== null && $type_model->attached_storage->table !== null && $type_model->attached_storage->table !== "") {
+				$route->table_name = $type_model->attached_storage->table;
+				return $route;
+			}
+		}
+
+		if (count($node->mat) <= 0) {
+			return null;
+		}
+
+		$mat = $node->mat[0];
+		$route->mode = (string) ($mat->mode ?? "");
+
+		if (($route->mode === "one_to_many") || ($route->mode === "type_table") || ($route->mode === "value_column")) {
+			if ($mat->table !== null && $mat->table !== "") {
+				$route->table_name = $mat->table;
+				return $route;
+			}
+		}
+
+		if (($route->mode === "ref_column") || ($route->mode === "collection_table") || ($route->mode === "join_table")) {
+			if ($node->path !== null && $node->path !== "") {
+				$route->table_name = self::resolve_table_name($node->path);
+				return $route;
+			}
+		}
+
+		if ($mat->table !== null && $mat->table !== "") {
+			$route->table_name = $mat->table;
+			return $route;
+		}
+
+		if ($mat->link_table !== null && $mat->link_table !== "") {
+			$route->table_name = $mat->link_table;
+			return $route;
+		}
+
+		return null;
+	}
+
+	public static function resolve_relation_route_from_node(\om3\base\orm\orm_node $node): ?writer_relation_route
+	{
+		if (count($node->mat) <= 0) {
+			return null;
+		}
+
+		$mat = $node->mat[0];
+		$route = new writer_relation_route();
+		$route->mode = (string) ($mat->mode ?? "");
+		if ($route->mode === "ref_column" || $route->mode === "value_column" || $route->mode === "one_to_many") {
+			$route->table_name = (string) ($mat->table ?? "");
+		} else {
+			$route->table_name = (string) ($mat->link_table ?? "");
+		}
+		$route->owner_column = $mat->owner_column;
+		$route->id_column = $mat->id_column;
+		$route->link_left = $mat->link_left;
+		$route->link_right = $mat->link_right;
+
+		if (($route->mode === "ref_column") && (($route->id_column === null) || ($route->id_column === ""))) {
+			$route->id_column = self::resolve_singular_ref_column((string) ($node->name ?? ""));
+		}
+		if (($route->mode === "one_to_many") && (($route->owner_column === null) || ($route->owner_column === ""))) {
+			$route->owner_column = self::resolve_relation_owner_column((string) ($node->parent->path ?? ""));
+		}
+		if ((($route->mode === "collection_table") || ($route->mode === "join_table")) && (($route->owner_column === null) || ($route->owner_column === ""))) {
+			$route->owner_column = $route->link_left;
+		}
+		if ((($route->mode === "collection_table") || ($route->mode === "join_table")) && (($route->id_column === null) || ($route->id_column === ""))) {
+			$route->id_column = $route->link_right;
+		}
+
+		return $route;
+	}
+
+	public static function find_orm_node_by_path(\om3\base\orm\orm_root $root, string $path): ?\om3\base\orm\orm_node
+	{
+		foreach ($root->nodes as $node) {
+			if ($node->path === $path) {
+				return $node;
+			}
+		}
+
+		return null;
+	}
+
+	public static function resolve_relation_route(string $parent_path, string $property_name): writer_relation_route
+	{
+		$route = new writer_relation_route();
+		$route->mode = "collection_table";
+		$route->table_name = self::resolve_table_name($parent_path . "." . $property_name);
+		$route->owner_column = self::resolve_relation_owner_column($parent_path);
+		$route->id_column = self::resolve_relation_target_column($property_name);
+		$route->link_left = $route->owner_column;
+		$route->link_right = $route->id_column;
+		return $route;
+	}
+
+	public static function resolve_singular_ref_route(string $parent_path, string $property_name): writer_relation_route
+	{
+		$route = new writer_relation_route();
+		$route->mode = "ref_column";
+		$route->table_name = self::resolve_table_name($parent_path);
+		$route->id_column = self::resolve_singular_ref_column($property_name);
+		$route->link_right = $route->id_column;
+		return $route;
+	}
+
+	public static function resolve_relation_owner_column(string $parent_path): string
+	{
+		return strtolower(self::resolve_tail_name($parent_path)) . "_id";
+	}
+
+	public static function resolve_relation_target_column(string $property_name): string
+	{
+		return strtolower($property_name) . "_id";
+	}
+
+	public static function resolve_tail_name(string $path): string
+	{
+		$parts = explode(".", $path);
+		if (count($parts) <= 0) {
+			return $path;
+		}
+		return $parts[count($parts) - 1];
+	}
+
+	public static function stamp_node_resolution(writer_payload_node $node, string $action, ?int $resolved_id): void
+	{
+		$node->writer_action = $action;
+		$node->writer_resolved_id = $resolved_id;
+
+		$data dynamic = $node->data;
+		$meta dynamic = (isset($data["$$"]) ? $data["$$"] : (object) []);
+		$meta["action"] = $action;
+		$meta["resolved_id"] = $resolved_id;
+		$data["$$"] = $meta;
+		$node->data = $data;
+	}
+
+	public static function extract_node_resolved_id(writer_payload_node $node): ?int
+	{
+		if ($node->writer_resolved_id !== null) {
+			return $node->writer_resolved_id;
+		}
+
+		$data dynamic = $node->data;
+		$data_hash hash<mixed> = to_hash($data);
+		if (isset($data_hash["$$"])) {
+			$meta dynamic = $data_hash["$$"];
+			$meta_hash hash<mixed> = to_hash($meta);
+			if (isset($meta_hash["resolved_id"]) && $meta_hash["resolved_id"] !== null) {
+				return (int) $meta_hash["resolved_id"];
+			}
+		}
+
+		return self::extract_row_id($data_hash);
+	}
+
+	public static function extract_node_meta_resolved_id(writer_payload_node $node): ?int
+	{
+		return $node->writer_resolved_id;
+	}
+
+	public static function collect_key_fields(writer_sql_batch $batch): vector<string>
+	{
+		if ($batch->action !== "update") {
+			$empty vector<string> = [];
+			return $empty;
+		}
+
+		$key_fields vector<string> = [];
+		$key_fields[] = "Id";
+		return $key_fields;
+	}
+
+	public static function collect_set_fields(writer_sql_batch $batch): vector<string>
+	{
+		if ($batch->action !== "update") {
+			$empty vector<string> = [];
+			return $empty;
+		}
+
+		$set_fields vector<string> = [];
+		foreach ($batch->fields as $field_name) {
+			if ($field_name === "Id") {
+				continue;
+			}
+			$set_fields[] = $field_name;
+		}
+		return $set_fields;
+	}
+
+	public static function dedupe_batch_rows(vector<dynamic> $rows, vector<string> $fields): vector<dynamic>
+	{
+		$deduped vector<dynamic> = [];
+		$row_map hash<bool> = [];
+		$row_list = $rows;
+		$field_list = $fields;
+
+		foreach ($row_list as $row) {
+			$signature = self::build_row_signature($row, $field_list);
+			if (isset($row_map[$signature])) {
+				continue;
+			}
+
+			$row_map[$signature] = true;
+			$deduped[] = $row;
+		}
+
+		return $deduped;
+	}
+
+	public static function collect_row_values(vector<dynamic> $rows, vector<string> $fields): vector<vector<mixed>>
+	{
+		$values vector<vector<mixed>> = [];
+		$row_list = $rows;
+		$field_list = $fields;
+
+		foreach ($row_list as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			$row_values vector<mixed> = [];
+			foreach ($field_list as $field_name) {
+				if (isset($row_hash[$field_name])) {
+					$row_values[] = $row_hash[$field_name];
+				} else {
+					$row_values[] = null;
+				}
+			}
+			$values[] = $row_values;
+		}
+
+		return $values;
+	}
+
+	public static function collect_placeholder_ids(vector<dynamic> $rows): vector<int>
+	{
+		$ids vector<int> = [];
+		$row_list = $rows;
+
+		foreach ($row_list as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			if (!isset($row_hash["Id"])) {
+				continue;
+			}
+			$row_id = $row_hash["Id"];
+			if ($row_id === null) {
+				continue;
+			}
+			$id_int = (int) $row_id;
+			if ($id_int < 1000000) {
+				continue;
+			}
+			$ids[] = $id_int;
+		}
+
+		return $ids;
+	}
+
+	public static function collect_group_placeholder_ids(writer_write_group $group): vector<int>
+	{
+		$ids vector<int> = [];
+		$row_list = $group->rows;
+
+		foreach ($row_list as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			if (isset($row_hash["Id"]) && $row_hash["Id"] !== null) {
+				$id_int = (int) $row_hash["Id"];
+				if ($id_int >= 1000000) {
+					$ids[] = $id_int;
+				}
+			}
+		}
+
+		return $ids;
+	}
+
+	public static function collect_row_signatures(vector<dynamic> $rows, vector<string> $fields): vector<string>
+	{
+		$signatures vector<string> = [];
+		$row_list = $rows;
+
+		foreach ($row_list as $row) {
+			$signatures[] = self::build_row_signature($row, $fields);
+		}
+
+		return $signatures;
+	}
+
+	public static function collect_signature_placeholder_ids(writer_write_group $group, vector<dynamic> $rows, vector<string> $fields): hash<vector<int>>
+	{
+		$map hash<vector<int>> = [];
+		$row_list = $rows;
+
+		foreach ($row_list as $row) {
+			$signature = self::build_row_signature($row, $fields);
+			$empty_ids vector<int> = [];
+			$map[$signature] = $empty_ids;
+		}
+
+		$group_rows = $group->rows;
+		foreach ($group_rows as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			if (!isset($row_hash["Id"]) || $row_hash["Id"] === null) {
+				continue;
+			}
+
+			$placeholder_id = (int) $row_hash["Id"];
+			if ($placeholder_id < 1000000) {
+				continue;
+			}
+
+			$signature = self::build_row_signature_from_hash($row_hash, $fields);
+			if (!isset($map[$signature])) {
+				$empty_ids vector<int> = [];
+				$map[$signature] = $empty_ids;
+			}
+
+			$placeholder_ids = $map[$signature];
+			$placeholder_ids[] = $placeholder_id;
+			$map[$signature] = $placeholder_ids;
+		}
+
+		return $map;
+	}
+
+	public static function build_row_signature(dynamic $row, vector<string> $fields): string
+	{
+		$row_hash hash<mixed> = to_hash($row);
+		return self::build_row_signature_from_hash($row_hash, $fields);
+	}
+
+	public static function build_row_signature_from_hash(hash<mixed> $row_hash, vector<string> $fields): string
+	{
+		$field_list = $fields;
+		$parts vector<string> = [];
+
+		foreach ($field_list as $field_name) {
+			$field_value = (isset($row_hash[$field_name]) ? $row_hash[$field_name] : null);
+			$parts[] = $field_name . "=" . self::debug_sql_value($field_value);
+		}
+
+		return implode("|", $parts);
+	}
+
+	public static function dedupe_link_rows(vector<dynamic> $rows, vector<string> $columns, string $kind): vector<dynamic>
+	{
+		$deduped vector<dynamic> = [];
+		$row_map hash<bool> = [];
+		$row_list = $rows;
+		$signature_fields vector<string> = [];
+
+		if ($kind === "singular_ref_update" || $kind === "one_to_many_update") {
+			$signature_fields[] = "Id";
+			$columns_copy = $columns;
+			foreach ($columns_copy as $column_name) {
+				$signature_fields[] = $column_name;
+			}
+		} else {
+			$columns_copy = $columns;
+			foreach ($columns_copy as $column_name) {
+				$signature_fields[] = $column_name;
+			}
+		}
+
+		foreach ($row_list as $row) {
+			$signature = self::build_row_signature($row, $signature_fields);
+			if (isset($row_map[$signature])) {
+				continue;
+			}
+
+			$row_map[$signature] = true;
+			$deduped[] = $row;
+		}
+
+		return $deduped;
+	}
+
+	public static function build_link_debug_sql(writer_link_batch $batch): string
+	{
+		$row_sql vector<string> = [];
+		foreach ($batch->rows as $row) {
+			$row_hash hash<mixed> = to_hash($row);
+			$value_sql vector<string> = [];
+
+			if ($batch->kind === "singular_ref_update" || $batch->kind === "one_to_many_update") {
+				$value_sql[] = self::debug_sql_value((isset($row_hash["Id"]) ? $row_hash["Id"] : null));
+			}
+
+			foreach ($batch->columns as $column_name) {
+				$value_sql[] = self::debug_sql_value((isset($row_hash[$column_name]) ? $row_hash[$column_name] : null));
+			}
+			$row_sql[] = "(" . implode(", ", $value_sql) . ")";
+		}
+
+		if ($batch->kind === "singular_ref_update") {
+			$field_sql vector<string> = ["Id"];
+			foreach ($batch->columns as $column_name) {
+				$field_sql[] = $column_name;
+			}
+			return "LINK-UPDATE " . $batch->table_name .
+				" (" . implode(", ", $field_sql) . ") VALUES " . implode(", ", $row_sql);
+		}
+
+		if ($batch->kind === "one_to_many_update") {
+			$field_sql vector<string> = ["Id"];
+			foreach ($batch->columns as $column_name) {
+				$field_sql[] = $column_name;
+			}
+			return "LINK-BACKREF " . $batch->table_name .
+				" (" . implode(", ", $field_sql) . ") VALUES " . implode(", ", $row_sql);
+		}
+
+		return "LINK-INSERT " . $batch->table_name .
+			" (" . implode(", ", $batch->columns) . ") VALUES " . implode(", ", $row_sql);
+	}
+
+	public static function build_debug_sql(writer_sql_batch $batch): string
+	{
+		$field_sql vector<string> = [];
+		foreach ($batch->fields as $field_name) {
+			$field_sql[] = $field_name;
+		}
+
+		$row_sql vector<string> = [];
+		foreach ($batch->row_values as $row_values) {
+			$value_sql vector<string> = [];
+			foreach ($row_values as $value) {
+				$value_sql[] = self::debug_sql_value($value);
+			}
+			$row_sql[] = "(" . implode(", ", $value_sql) . ")";
+		}
+
+		if ($batch->action === "update") {
+			return "UPSERT " . $batch->table_name .
+				" /* path=" . $batch->path . "; materialization=" . $batch->materialization_key . " */" .
+				" KEYS (" . implode(", ", $batch->key_fields) . ")" .
+				" SET (" . implode(", ", $batch->set_fields) . ")" .
+				" VALUES " . implode(", ", $row_sql);
+		}
+
+		return "INSERT " . $batch->table_name .
+			" /* path=" . $batch->path . "; materialization=" . $batch->materialization_key . " */" .
+			" (" . implode(", ", $field_sql) . ") VALUES " . implode(", ", $row_sql);
+	}
+
+	public static function debug_sql_value(mixed $value): string
+	{
+		if ($value === null) {
+			return "NULL";
+		}
+
+		return "'" . str_replace("'", "''", (string) $value) . "'";
+	}
+}
