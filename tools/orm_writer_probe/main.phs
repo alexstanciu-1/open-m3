@@ -312,9 +312,9 @@ function run_explicit_selector_case(): void
 	}
 	echo "==read_groups==\n";
 	$read_groups = $writer->collect_read_groups($request);
-	foreach ($read_groups as $group) {
-		echo "path=", $group->path, "|ids=", (string) count($group->ids), "\n";
-		foreach ($group->ids as $id) {
+	foreach ($read_groups as $read_group) {
+		echo "path=", $read_group->path, "|ids=", (string) count($read_group->ids), "\n";
+		foreach ($read_group->ids as $id) {
 			echo "id=", (string) $id, "\n";
 		}
 	}
@@ -338,8 +338,8 @@ function run_explicit_selector_case(): void
 	}
 	echo "==write_plan==\n";
 	$write_plan = $writer->collect_write_plan($request, $existing_rows);
-	foreach ($write_plan->groups as $group) {
-		echo "path=", $group->path, "|action=", $group->action, "|rows=", (string) count($group->rows), "\n";
+	foreach ($write_plan->groups as $write_group) {
+		echo "path=", $write_group->path, "|action=", $write_group->action, "|rows=", (string) count($write_group->rows), "\n";
 	}
 	echo "==relation_candidates==\n";
 	$relation_candidates = $writer->collect_relation_candidates($request);
@@ -359,53 +359,53 @@ function run_explicit_selector_case(): void
 	}
 	echo "==sql_batches==\n";
 	$sql_batches = $writer->collect_sql_batches($request, $existing_rows);
-	foreach ($sql_batches as $batch) {
-		echo "key=", $batch->key, "|path=", $batch->path, "|action=", $batch->action, "|mat=", $batch->materialization_key, "|table=", $batch->table_name, "|fields=", (string) count($batch->fields), "|rows=", (string) count($batch->rows), "\n";
-		foreach ($batch->fields as $field_name) {
+	foreach ($sql_batches as $sql_batch) {
+		echo "key=", $sql_batch->key, "|path=", $sql_batch->path, "|action=", $sql_batch->action, "|mat=", $sql_batch->materialization_key, "|table=", $sql_batch->table_name, "|fields=", (string) count($sql_batch->fields), "|rows=", (string) count($sql_batch->rows), "\n";
+		foreach ($sql_batch->fields as $field_name) {
 			echo "batch_field=", $field_name, "\n";
 		}
-		foreach ($batch->key_fields as $field_name) {
+		foreach ($sql_batch->key_fields as $field_name) {
 			echo "key_field=", $field_name, "\n";
 		}
-		foreach ($batch->set_fields as $field_name) {
+		foreach ($sql_batch->set_fields as $field_name) {
 			echo "set_field=", $field_name, "\n";
 		}
-		echo "debug_sql=", $batch->debug_sql, "\n";
+		echo "debug_sql=", $sql_batch->debug_sql, "\n";
 	}
 	echo "==link_plan==\n";
 	$link_plan = $writer->collect_link_plan($request, $existing_rows);
-	foreach ($link_plan->batches as $batch) {
-		echo "key=", $batch->key, "|kind=", $batch->kind, "|table=", $batch->table_name, "|columns=", (string) count($batch->columns), "|rows=", (string) count($batch->rows), "\n";
-		foreach ($batch->columns as $column_name) {
+	foreach ($link_plan->batches as $link_batch) {
+		echo "key=", $link_batch->key, "|kind=", $link_batch->kind, "|table=", $link_batch->table_name, "|columns=", (string) count($link_batch->columns), "|rows=", (string) count($link_batch->rows), "\n";
+		foreach ($link_batch->columns as $column_name) {
 			echo "link_column=", $column_name, "\n";
 		}
-		echo "debug_sql=", $batch->debug_sql, "\n";
+		echo "debug_sql=", $link_batch->debug_sql, "\n";
 	}
 	echo "==mysql_emit==\n";
 	$emitter = new \om3\base\writer\mysql_writer_sql_emitter();
 	$emitter->row_batch_chunk_size = 2;
 	$emitter->link_batch_chunk_size = 2;
 	$execution_plan = $writer->collect_execution_plan($request, $existing_rows, $emitter);
-	foreach ($execution_plan->row_sql as $statement) {
-		echo "row_sql=", $statement, "\n";
+	foreach ($execution_plan->row_sql as $row_sql_statement) {
+		echo "row_sql=", $row_sql_statement, "\n";
 	}
-	foreach ($execution_plan->final_link_sql as $statement) {
-		echo "link_sql=", $statement, "\n";
+	foreach ($execution_plan->final_link_sql as $link_sql_statement) {
+		echo "link_sql=", $link_sql_statement, "\n";
 	}
 	echo "==id_bridge==\n";
-	foreach ($execution_plan->row_execution_statements as $statement) {
+	foreach ($execution_plan->row_execution_statements as $execution_statement) {
 		$first_insert_id string = "";
-		if ($statement->simulated_first_insert_id !== null) {
-			$first_insert_id = (string) $statement->simulated_first_insert_id;
+		if ($execution_statement->simulated_first_insert_id !== null) {
+			$first_insert_id = (string) $execution_statement->simulated_first_insert_id;
 		}
-		echo "exec_kind=", $statement->kind, "|table=", $statement->table_name, "|first_insert_id=", $first_insert_id, "|placeholder_ids=", (string) count($statement->placeholder_ids), "\n";
-		foreach ($statement->placeholder_ids as $placeholder_id) {
+		echo "exec_kind=", $execution_statement->kind, "|table=", $execution_statement->table_name, "|first_insert_id=", $first_insert_id, "|placeholder_ids=", (string) count($execution_statement->placeholder_ids), "\n";
+		foreach ($execution_statement->placeholder_ids as $placeholder_id) {
 			echo "placeholder_id=", (string) $placeholder_id, "\n";
 		}
 	}
 	if ($execution_plan->id_bridge_result !== null) {
-		foreach ($execution_plan->id_bridge_result->resolved_ids as $placeholder_id => $resolved_id) {
-		echo "bridge=", $placeholder_id, "->", (string) $resolved_id, "\n";
+		foreach ($execution_plan->id_bridge_result->resolved_ids as $bridge_placeholder_id => $resolved_id) {
+		echo "bridge=", $bridge_placeholder_id, "->", (string) $resolved_id, "\n";
 		}
 	}
 	echo "==link_plan_after_bridge==\n";
