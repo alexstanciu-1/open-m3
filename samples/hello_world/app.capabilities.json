@@ -1,0 +1,20 @@
+{
+  "target": "pwa",
+  "engine": {
+    "mode": "none",
+    "required": false,
+    "note": "Hello World uses a local mock adapter action."
+  },
+  "capabilities": {
+    "localPersistence": "none",
+    "filesystem": "none",
+    "projectAccess": "none",
+    "nativeDialogs": false,
+    "notifications": "none",
+    "offline": "none",
+    "diagnostics": [
+      "console",
+      "runtime-panel"
+    ]
+  }
+}

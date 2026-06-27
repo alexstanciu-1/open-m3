@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	package="{{ android_package }}">
+	<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35" />
+	<uses-permission android:name="android.permission.INTERNET" />
+
+	<application
+		android:extractNativeLibs="true"
+		android:theme="@style/DescriptiveWebViewTheme"
+		android:label="{{ app_title }}">
+		<activity
+			android:name=".{{ android_activity }}"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN" />
+				<category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+		</activity>
+	</application>
+</manifest>

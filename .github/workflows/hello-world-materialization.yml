@@ -1,0 +1,619 @@
+name: Hello World Materialization
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  materialize-hello-world:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Materialize all targets
+        run: php materializers/materialize.php --app samples/hello_world --all
+
+      - name: Validate generated shape
+        run: |
+          set -euo pipefail
+          targets="pwa webview-win webview-mac webview-linux webview-ios webview-android"
+          for target in $targets; do
+            test -f "samples/hello_world/.generated/build/$target/app/index.html"
+            test -f "samples/hello_world/.generated/build/$target/app/ui/main/ui.ir.json"
+            test -f "samples/hello_world/.generated/build/$target/app/ui/main/ui.manifest.json"
+            test -f "samples/hello_world/.generated/build/$target/materialization.manifest.json"
+            if [ "$target" != "pwa" ]; then
+              test -f "samples/hello_world/.generated/build/$target/host/main.phs"
+              test -f "samples/hello_world/.generated/build/$target/host/prism.json"
+              test -f "samples/hello_world/.generated/build/$target/app/webview-bridge.js"
+            fi
+            if [ "$target" = "webview-ios" ]; then
+              test -f "samples/hello_world/.generated/build/$target/host/ios/main.mm"
+              test -f "samples/hello_world/.generated/build/$target/host/ios/Info.plist"
+            fi
+            if [ "$target" = "webview-android" ]; then
+              test -f "samples/hello_world/.generated/build/$target/host/android/AndroidManifest.xml"
+              test -f "samples/hello_world/.generated/build/$target/host/android/descriptive_webview_host.cpp"
+              test -f "samples/hello_world/.generated/build/$target/host/android/src/dev/openm3/hello_world/DescriptiveWebViewActivity.java"
+            fi
+          done
+
+      - name: Validate JSON artifacts
+        run: |
+          set -euo pipefail
+          find samples/hello_world/.generated -type f \( -name '*.json' -o -name '*.webmanifest' \) -print0 \
+            | xargs -0 -n1 php -r 'json_decode(file_get_contents($argv[1]), true); if (json_last_error() !== JSON_ERROR_NONE) { fwrite(STDERR, $argv[1] . ": " . json_last_error_msg() . PHP_EOL); exit(1); }'
+
+      - name: Compare regenerated fixtures
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- samples/hello_world/.generated; then
+            echo "Generated Hello World fixtures are stale. Run: php materializers/materialize.php --app samples/hello_world --all" >&2
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1.45.3
+          npx playwright install --with-deps chromium
+
+      - name: Capture PWA screenshot
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory samples/hello_world/.generated/build/pwa/app > /tmp/hello-world-http.log 2>&1 &
+          echo $! > /tmp/hello-world-http.pid
+          node <<'JS'
+          const { chromium, devices } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const screenshots = [
+              { name: 'pwa', path: 'samples/hello_world/.generated/diagnostics/hello-world-pwa.png', options: { viewport: { width: 1280, height: 800 } } },
+              { name: 'ios-preview', path: 'samples/hello_world/.generated/diagnostics/hello-world-ios-preview.png', options: { ...devices['iPhone 13'] } },
+              { name: 'android-preview', path: 'samples/hello_world/.generated/diagnostics/hello-world-android-preview.png', options: { ...devices['Pixel 5'] } }
+            ];
+            for (const screenshot of screenshots) {
+              const context = await browser.newContext(screenshot.options);
+              const page = await context.newPage();
+              await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+              await page.getByText('Hello World!').waitFor();
+              await page.locator('[data-dp-id="hello_result"]').filter({ hasText: 'pong from the pwa adapter' }).waitFor();
+              await page.waitForFunction(() => document.documentElement.dataset.dpSmoke === 'ok');
+              await page.screenshot({ path: screenshot.path, fullPage: true });
+              await context.close();
+            }
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          JS
+          python3 tools/ci/check_png_render.py samples/hello_world/.generated/diagnostics/hello-world-pwa.png --min-width 640 --min-height 420 --require-openm3-ui --require-smoke-action
+          python3 tools/ci/check_png_render.py samples/hello_world/.generated/diagnostics/hello-world-ios-preview.png --min-width 300 --min-height 600 --require-openm3-ui --require-smoke-action
+          python3 tools/ci/check_png_render.py samples/hello_world/.generated/diagnostics/hello-world-android-preview.png --min-width 300 --min-height 600 --require-openm3-ui --require-smoke-action
+
+      - name: Upload PWA screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-pwa-screenshot
+          path: samples/hello_world/.generated/diagnostics/hello-world-pwa.png
+
+      - name: Upload iOS PWA preview screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-ios-preview-screenshot
+          path: samples/hello_world/.generated/diagnostics/hello-world-ios-preview.png
+
+      - name: Upload Android PWA preview screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-android-preview-screenshot
+          path: samples/hello_world/.generated/diagnostics/hello-world-android-preview.png
+
+
+  # Simple C++ CI reference: /simple_cpp/.github/workflows/ci.yml
+  # Native compile is intentionally CI-only; local WSL preview stops at emission/PWA render.
+  # This job covers desktop webview host projects. iOS/Android require mobile-specific
+  # app bundle/APK templates following the Simple C++ CI mobile smoke pattern.
+  compile-simplecpp-webviews:
+    name: Compile ${{ matrix.target }} host on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: materialize-hello-world
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: webview-linux
+          - os: windows-latest
+            target: webview-win
+          - os: macos-latest
+            target: webview-mac
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: ast
+          coverage: none
+
+      - name: Install native UI build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build g++ pkg-config libgtk-3-dev xvfb imagemagick dbus-x11 openbox
+            if apt-cache show libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
+              sudo apt-get install -y libwebkit2gtk-4.1-dev
+            else
+              sudo apt-get install -y libwebkit2gtk-4.0-dev
+            fi
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            command -v ninja >/dev/null 2>&1 || brew install ninja
+            command -v pkg-config >/dev/null 2>&1 || brew install pkg-config
+          else
+            echo "Windows native tools are provided by Visual Studio image and msvc-dev-cmd."
+          fi
+
+      - name: Setup MSVC developer shell
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Simple C++ on Linux
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.1.73 https://github.com/alexstanciu-1/simplecpp.git /tmp/simplecpp
+          php /tmp/simplecpp/install/install.php
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Simple C++ on macOS
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.1.73 https://github.com/alexstanciu-1/simplecpp.git /tmp/simplecpp
+          php /tmp/simplecpp/install/install.php
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Simple C++ on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v0.1.73 https://github.com/alexstanciu-1/simplecpp.git $env:TEMP\simplecpp
+          php "$env:TEMP\simplecpp\install\install.php"
+          "$env:LOCALAPPDATA\Programs\scpp\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Materialize all targets
+        run: php materializers/materialize.php --app samples/hello_world --all
+
+      - name: Install Windows WebView2 SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $hostDir = "samples/hello_world/.generated/build/webview-win/host"
+          $nuget = Get-Command nuget -ErrorAction SilentlyContinue
+          if ($nuget) {
+            $nugetCommand = $nuget.Source
+          } else {
+            Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
+            $nugetCommand = (Resolve-Path ".\nuget.exe").Path
+          }
+          & $nugetCommand install Microsoft.Web.WebView2 -OutputDirectory "$hostDir/.nuget-packages" -ExcludeVersion -NonInteractive
+          $webView2Root = (Resolve-Path "$hostDir/.nuget-packages/Microsoft.Web.WebView2").Path
+          "SCPP_WEBVIEW2_SDK_DIR=$webView2Root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify Simple C++ install
+        run: |
+          scpp --version
+          scpp --doctor
+
+      - name: Compile generated Simple C++ webview host
+        working-directory: samples/hello_world/.generated/build/${{ matrix.target }}/host
+        run: scpp build --build-runtime
+
+      - name: Capture Linux generated webview screenshot
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p samples/hello_world/.generated/diagnostics
+          screenshot_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.png"
+          stdout_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.out.txt"
+          stderr_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.err.txt"
+          host_dir="samples/hello_world/.generated/build/${{ matrix.target }}/host"
+          xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- bash -c '
+            set -euo pipefail
+            openbox > /tmp/openm3-openbox.out 2> /tmp/openm3-openbox.err &
+            wm_pid=$!
+            sleep 1
+            cd "'"$host_dir"'"
+            GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 ./.prism/build/main > "'"$GITHUB_WORKSPACE/$stdout_path"'" 2> "'"$GITHUB_WORKSPACE/$stderr_path"'" &
+            app_pid=$!
+            captured=0
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              sleep 2
+              import -window root "'"$GITHUB_WORKSPACE/$screenshot_path"'"
+              if python3 "'"$GITHUB_WORKSPACE/tools/ci/check_png_render.py"'" "'"$GITHUB_WORKSPACE/$screenshot_path"'" --min-width 640 --min-height 420 --require-openm3-ui --require-smoke-action; then
+                captured=1
+                break
+              fi
+              if ! kill -0 "$app_pid" >/dev/null 2>&1; then
+                wait "$app_pid"
+                kill "$wm_pid" 2>/dev/null || true
+                exit 1
+              fi
+            done
+            kill "$app_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+            kill "$wm_pid" 2>/dev/null || true
+            wait "$wm_pid" 2>/dev/null || true
+            test "$captured" = "1"
+          '
+
+      - name: Capture macOS generated webview screenshot
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p samples/hello_world/.generated/diagnostics
+          screenshot_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.png"
+          stdout_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.out.txt"
+          stderr_path="samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.err.txt"
+          host_dir="samples/hello_world/.generated/build/${{ matrix.target }}/host"
+          (cd "$host_dir" && ./.prism/build/main > "$GITHUB_WORKSPACE/$stdout_path" 2> "$GITHUB_WORKSPACE/$stderr_path" & echo $! > /tmp/openm3-webview-mac.pid)
+          captured=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            sleep 2
+            screencapture -x "$screenshot_path"
+            if python3 tools/ci/check_png_render.py "$screenshot_path" --min-width 640 --min-height 420 --require-openm3-ui --require-smoke-action; then
+              captured=1
+              break
+            fi
+          done
+          if [ -f /tmp/openm3-webview-mac.pid ]; then
+            kill "$(cat /tmp/openm3-webview-mac.pid)" 2>/dev/null || true
+            wait "$(cat /tmp/openm3-webview-mac.pid)" 2>/dev/null || true
+          fi
+          test "$captured" = "1"
+
+      - name: Capture Windows generated webview screenshot
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $diagnostics = "samples/hello_world/.generated/diagnostics"
+          New-Item -ItemType Directory -Force -Path $diagnostics | Out-Null
+          $screenshotPath = Join-Path $diagnostics "hello-world-${{ matrix.target }}.png"
+          $stdoutPath = Join-Path $diagnostics "hello-world-${{ matrix.target }}.out.txt"
+          $stderrPath = Join-Path $diagnostics "hello-world-${{ matrix.target }}.err.txt"
+          $hostDir = "samples/hello_world/.generated/build/${{ matrix.target }}/host"
+          $exe = Join-Path $hostDir ".prism/build/main.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Generated executable not found: $exe"
+          }
+          $resolvedExe = (Resolve-Path $exe).Path
+          if ($env:SCPP_WEBVIEW2_SDK_DIR) {
+            $webView2NativeDir = Join-Path $env:SCPP_WEBVIEW2_SDK_DIR "build\native\x64"
+            $webView2Dll = Join-Path $webView2NativeDir "WebView2Loader.dll"
+            if (-not (Test-Path $webView2Dll)) {
+              throw "WebView2Loader.dll not found at $webView2Dll"
+            }
+            Copy-Item $webView2Dll (Split-Path $resolvedExe -Parent) -Force
+            $env:PATH = "$webView2NativeDir;$env:PATH"
+          }
+          Write-Host "Generated executable directory:"
+          Get-ChildItem (Split-Path $resolvedExe -Parent) | Format-Table Name, Length
+          Write-Host "Generated executable dependencies:"
+          & dumpbin /DEPENDENTS $resolvedExe
+          if ($LASTEXITCODE -ne 0) {
+            throw "dumpbin dependency inspection failed with exit code $LASTEXITCODE"
+          }
+          $runtimeLib = Get-ChildItem (Join-Path $hostDir ".prism/runtime") -Recurse -File -Filter "libruntime.*" | Select-Object -First 1
+          if (-not $runtimeLib) {
+            throw "Simple C++ runtime library was not found under $hostDir/.prism/runtime"
+          }
+          $exeDir = Split-Path $resolvedExe -Parent
+          Copy-Item $runtimeLib.FullName $exeDir -Force
+          $env:PATH = "$exeDir;$($runtimeLib.DirectoryName);$env:PATH"
+          $process = Start-Process -FilePath $resolvedExe -WorkingDirectory (Resolve-Path $hostDir).Path -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -AssemblyName System.Windows.Forms
+          $captured = $false
+          try {
+            for ($attempt = 1; $attempt -le 12; $attempt++) {
+              Start-Sleep -Seconds 2
+              $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+              $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+              try {
+                $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+                $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+              } finally {
+                $graphics.Dispose()
+                $bitmap.Dispose()
+              }
+              python tools/ci/check_png_render.py $screenshotPath --min-width 640 --min-height 420 --require-openm3-ui --require-smoke-action
+              if ($LASTEXITCODE -eq 0) {
+                $captured = $true
+                break
+              }
+              if ($process.HasExited) {
+                throw "Generated webview app exited before a valid screenshot was captured. ExitCode=$($process.ExitCode)"
+              }
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+          if (-not $captured) {
+            throw "Generated webview screenshot did not pass render validation."
+          }
+
+      - name: Upload generated webview screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-${{ matrix.target }}-screenshot
+          path: |
+            samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.png
+            samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.out.txt
+            samples/hello_world/.generated/diagnostics/hello-world-${{ matrix.target }}.err.txt
+          if-no-files-found: ignore
+
+  render-ios-generated-webview:
+    name: Render generated iOS webview host
+    runs-on: macos-latest
+    needs: materialize-hello-world
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Materialize all targets
+        run: php materializers/materialize.php --app samples/hello_world --all
+
+      - name: Build generated iOS webview app
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.1.73 https://github.com/alexstanciu-1/simplecpp.git /tmp/simplecpp
+          host_dir="samples/hello_world/.generated/build/webview-ios/host"
+          app_bundle="HelloWorld.app"
+          executable="HelloWorld"
+          rm -rf "$app_bundle"
+          mkdir -p "$app_bundle"
+          cp "$host_dir/ios/Info.plist" "$app_bundle/Info.plist"
+          cp -R "$host_dir/app" "$app_bundle/app"
+          IOS_SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          IOS_TARGET="arm64-apple-ios15.0-simulator"
+          clang++ -std=c++23 -x objective-c++ -target "$IOS_TARGET" -isysroot "$IOS_SDK" \
+            -I/tmp/simplecpp/runtime/include \
+            -DSCPP_HAS_UI=1 -DSCPP_UI_BACKEND_UIKIT=1 \
+            -DSCPP_HAS_WEBVIEW=1 -DSCPP_WEBVIEW_BACKEND_UIKIT_WKWEBVIEW=1 \
+            "$host_dir/ios/main.mm" /tmp/simplecpp/runtime/include/modules/ui/ui.cpp /tmp/simplecpp/runtime/include/modules/webview/webview.cpp \
+            -framework UIKit -framework Foundation -framework WebKit \
+            -o "$app_bundle/$executable"
+          codesign --force --sign - "$app_bundle"
+
+      - name: Capture generated iOS webview screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p samples/hello_world/.generated/diagnostics
+          screenshot_path="samples/hello_world/.generated/diagnostics/hello-world-webview-ios.png"
+          DEVICE_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && /Shutdown|Booted/ { print $2; exit }')"
+          if [ -z "$DEVICE_ID" ]; then
+            xcrun simctl list devices available
+            exit 1
+          fi
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" HelloWorld.app
+          xcrun simctl launch --terminate-running-process "$DEVICE_ID" dev.openm3.hello_world
+          sleep 4
+          xcrun simctl io "$DEVICE_ID" screenshot "$screenshot_path"
+          xcrun simctl terminate "$DEVICE_ID" dev.openm3.hello_world || true
+          python3 tools/ci/check_png_render.py "$screenshot_path" --min-width 300 --min-height 600 --require-openm3-ui --require-smoke-action
+
+      - name: Upload generated iOS webview screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-webview-ios-screenshot
+          path: samples/hello_world/.generated/diagnostics/hello-world-webview-ios.png
+          if-no-files-found: warn
+
+  render-android-generated-webview:
+    name: Render generated Android webview host
+    runs-on: ubuntu-latest
+    needs: materialize-hello-world
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Materialize all targets
+        run: php materializers/materialize.php --app samples/hello_world --all
+
+      - name: Build generated Android webview APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.1.73 https://github.com/alexstanciu-1/simplecpp.git /tmp/simplecpp
+          host_dir="samples/hello_world/.generated/build/webview-android/host"
+          android_jar="$ANDROID_HOME/platforms/android-35/android.jar"
+          if [ ! -f "$android_jar" ]; then
+            android_jar="$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -n 1)"
+          fi
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -f "$android_jar"
+          test -n "$build_tools"
+
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android35-clang++" \
+            -std=c++23 -I/tmp/simplecpp/runtime/include -DSCPP_HAS_UI=0 \
+            -DSCPP_HAS_WEBVIEW=1 -DSCPP_WEBVIEW_BACKEND_ANDROID_WEBVIEW=1 \
+            -shared -fPIC \
+            "$host_dir/android/descriptive_webview_host.cpp" /tmp/simplecpp/runtime/include/modules/webview/webview.cpp \
+            -o libdescriptive_webview_host.so
+
+          cxx_shared="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android" -name libc++_shared.so | sort -V | tail -n 1)"
+          test -f "$cxx_shared"
+
+          mkdir -p android_webview_classes android_webview_dex android_webview_package/lib/x86_64 android_webview_assets
+          cp -R "$host_dir/app" android_webview_assets/app
+          javac \
+            -source 17 -target 17 \
+            -classpath "$android_jar" \
+            -d android_webview_classes \
+            "$host_dir/android/src/dev/openm3/hello_world/DescriptiveWebViewActivity.java"
+          "$build_tools/d8" \
+            --min-api 24 \
+            --output android_webview_dex \
+            $(find android_webview_classes -name '*.class' | sort)
+          "$build_tools/aapt2" compile \
+            --dir "$host_dir/android/res" \
+            -o android_webview_res.zip
+          "$build_tools/aapt2" link \
+            -I "$android_jar" \
+            --manifest "$host_dir/android/AndroidManifest.xml" \
+            -A android_webview_assets \
+            -o android_webview-unsigned.apk \
+            android_webview_res.zip
+          cp android_webview_dex/classes.dex android_webview_package/classes.dex
+          cp libdescriptive_webview_host.so android_webview_package/lib/x86_64/libdescriptive_webview_host.so
+          cp "$cxx_shared" android_webview_package/lib/x86_64/libc++_shared.so
+          (cd android_webview_package && zip -qr ../android_webview-unsigned.apk classes.dex lib)
+          "$build_tools/zipalign" -f 4 android_webview-unsigned.apk android_webview-aligned.apk
+          keytool \
+            -genkeypair \
+            -keystore android_webview-debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=OpenM3"
+          "$build_tools/apksigner" sign \
+            --ks android_webview-debug.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out android_webview-signed.apk \
+            android_webview-aligned.apk
+          "$build_tools/apksigner" verify android_webview-signed.apk
+
+      - name: Capture generated Android webview screenshot
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          mkdir -p samples/hello_world/.generated/diagnostics
+          sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" | sort -V | tail -n 1)"
+          avdmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/avdmanager" | sort -V | tail -n 1)"
+          test -x "$sdkmanager_bin"
+          test -x "$avdmanager_bin"
+          "$sdkmanager_bin" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "no" | "$avdmanager_bin" create avd --force --name openm3_webview --package "system-images;android-35;google_apis;x86_64" --device pixel_2
+          adb_bin="$ANDROID_HOME/platform-tools/adb"
+          test -x "$adb_bin"
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+          emulator_log="samples/hello_world/.generated/diagnostics/android-emulator.log"
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd openm3_webview \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-metrics \
+            -no-snapshot \
+            -no-snapshot-save \
+            -wipe-data \
+            -gpu swiftshader_indirect \
+            -accel auto \
+            > "$emulator_log" 2>&1 &
+          emulator_pid="$!"
+          trap 'kill "$emulator_pid" >/dev/null 2>&1 || true' EXIT
+
+          timeout 180 "$adb_bin" wait-for-device || {
+            cat "$emulator_log"
+            exit 1
+          }
+          boot_completed=""
+          for _ in $(seq 1 120); do
+            boot_completed="$("$adb_bin" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            if [ "$boot_completed" = "1" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$boot_completed" != "1" ]; then
+            "$adb_bin" devices -l || true
+            cat "$emulator_log"
+            exit 1
+          fi
+
+          "$adb_bin" install -r android_webview-signed.apk
+          "$adb_bin" logcat -c
+          "$adb_bin" shell am start -W -n dev.openm3.hello_world/.DescriptiveWebViewActivity
+          sleep 8
+          "$adb_bin" shell pidof dev.openm3.hello_world >/dev/null || {
+            "$adb_bin" logcat -d > samples/hello_world/.generated/diagnostics/android-logcat.log || true
+            exit 1
+          }
+          "$adb_bin" shell dumpsys window > samples/hello_world/.generated/diagnostics/android-window.txt || true
+          grep -q "dev.openm3.hello_world" samples/hello_world/.generated/diagnostics/android-window.txt || {
+            "$adb_bin" logcat -d > samples/hello_world/.generated/diagnostics/android-logcat.log || true
+            cat samples/hello_world/.generated/diagnostics/android-window.txt || true
+            exit 1
+          }
+          screenshot_path="samples/hello_world/.generated/diagnostics/hello-world-webview-android.png"
+          "$adb_bin" exec-out screencap -p > "$screenshot_path"
+          test -s "$screenshot_path"
+          python3 tools/ci/check_png_render.py "$screenshot_path" --min-width 300 --min-height 600 --require-openm3-ui --require-smoke-action
+
+      - name: Upload generated Android webview screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-world-webview-android-screenshot
+          path: |
+            samples/hello_world/.generated/diagnostics/hello-world-webview-android.png
+            samples/hello_world/.generated/diagnostics/android-emulator.log
+            samples/hello_world/.generated/diagnostics/android-logcat.log
+            samples/hello_world/.generated/diagnostics/android-window.txt
+          if-no-files-found: ignore

@@ -1,0 +1,8 @@
+{
+    "ok": true,
+    "target": "webview-linux",
+    "generatedFiles": 26,
+    "overwrittenFiles": [
+        "app/index.html"
+    ]
+}

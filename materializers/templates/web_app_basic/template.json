@@ -1,0 +1,23 @@
+{
+  "name": "web_app_basic",
+  "version": 1,
+  "targets": [
+    "pwa",
+    "webview-win",
+    "webview-mac",
+    "webview-linux",
+    "webview-ios",
+    "webview-android"
+  ],
+  "defaultTarget": "pwa",
+  "runtime": "descriptivejs-v1-shell",
+  "description": "Basic web UI shell for PWA and Simple C++ webview targets.",
+  "overlays": [
+    "pwa",
+    "pwa+webview-any",
+    "webview-any",
+    "webview-win+webview-linux",
+    "webview-mac",
+    "webview-ios+webview-android"
+  ]
+}

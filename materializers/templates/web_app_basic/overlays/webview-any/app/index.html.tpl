@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#20535c">
+  <title>{{ app_title }} - Descriptive App</title>
+  <link rel="stylesheet" href="./ui/main/styles.css">
+</head>
+<body data-dp-target="{{ target }}">
+  <main id="app" class="dp-app" aria-live="polite"></main>
+  <script src="./ui/main/component.classic.js" defer></script>
+</body>
+</html>

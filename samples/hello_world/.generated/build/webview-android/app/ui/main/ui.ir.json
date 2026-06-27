@@ -1,0 +1,36 @@
+{
+    "kind": "descriptive-ui-ir",
+    "version": 1,
+    "source": "src/ui/main/ui.json",
+    "ui": "main",
+    "root": {
+        "type": "view",
+        "id": "hello_root",
+        "layout": "stack",
+        "children": [
+            {
+                "type": "text",
+                "id": "hello_title",
+                "variant": "title",
+                "value": "Hello World!"
+            },
+            {
+                "type": "text",
+                "id": "hello_body",
+                "value": "This UI was rendered from a descriptive JSON source through a tiny DescriptiveJS runtime shell."
+            },
+            {
+                "type": "button",
+                "id": "hello_ping",
+                "label": "Ping",
+                "action": "hello.ping"
+            },
+            {
+                "type": "text",
+                "id": "hello_result",
+                "bind": "lastAction.message",
+                "placeholder": "Action result will appear here."
+            }
+        ]
+    }
+}

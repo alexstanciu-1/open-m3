@@ -1,0 +1,46 @@
+{
+    "kind": "descriptive-materialization-manifest",
+    "version": 1,
+    "app": "hello_world",
+    "target": "pwa",
+    "template": "web_app_basic",
+    "templateVersion": 1,
+    "runtime": "descriptivejs-v1-shell",
+    "sourceFiles": [
+        "app.dp.json",
+        "app.capabilities.json",
+        "src/ui/main/ui.json"
+    ],
+    "layers": [
+        {
+            "kind": "template-base",
+            "selector": "files",
+            "path": "materializers/templates/web_app_basic/files"
+        },
+        {
+            "kind": "template-overlay",
+            "selector": "pwa",
+            "path": "materializers/templates/web_app_basic/overlays/pwa"
+        },
+        {
+            "kind": "template-overlay",
+            "selector": "pwa+webview-any",
+            "path": "materializers/templates/web_app_basic/overlays/pwa+webview-any"
+        }
+    ],
+    "overwrittenFiles": [],
+    "generatedFiles": [
+        "app/app.capabilities.json",
+        "app/app.description.json",
+        "app/index.html",
+        "app/manifest.webmanifest",
+        "app/runtime/adapters/pwa.js",
+        "app/runtime/descriptivejs/runtime.js",
+        "app/service-worker.js",
+        "app/ui/main/component.js",
+        "app/ui/main/styles.css",
+        "app/ui/main/ui.ir.js",
+        "app/ui/main/ui.ir.json",
+        "app/ui/main/ui.manifest.json"
+    ]
+}

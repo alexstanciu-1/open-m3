@@ -1,0 +1,78 @@
+{
+    "kind": "descriptive-materialization-manifest",
+    "version": 1,
+    "app": "hello_world",
+    "target": "webview-linux",
+    "template": "web_app_basic",
+    "templateVersion": 1,
+    "runtime": "descriptivejs-v1-shell",
+    "sourceFiles": [
+        "app.dp.json",
+        "app.capabilities.json",
+        "src/ui/main/ui.json"
+    ],
+    "layers": [
+        {
+            "kind": "template-base",
+            "selector": "files",
+            "path": "materializers/templates/web_app_basic/files"
+        },
+        {
+            "kind": "template-overlay",
+            "selector": "pwa+webview-any",
+            "path": "materializers/templates/web_app_basic/overlays/pwa+webview-any"
+        },
+        {
+            "kind": "template-overlay",
+            "selector": "webview-any",
+            "path": "materializers/templates/web_app_basic/overlays/webview-any"
+        },
+        {
+            "kind": "template-overlay",
+            "selector": "webview-win+webview-linux",
+            "path": "materializers/templates/web_app_basic/overlays/webview-win+webview-linux"
+        }
+    ],
+    "overwrittenFiles": {
+        "app/index.html": [
+            {
+                "kind": "template-base",
+                "selector": "files",
+                "path": "materializers/templates/web_app_basic/files/app/index.html.tpl"
+            },
+            {
+                "kind": "template-overlay",
+                "selector": "webview-any",
+                "path": "materializers/templates/web_app_basic/overlays/webview-any/app/index.html.tpl"
+            }
+        ]
+    },
+    "generatedFiles": [
+        "app/app.capabilities.json",
+        "app/app.capabilities.json",
+        "app/app.description.json",
+        "app/app.description.json",
+        "app/index.html",
+        "app/index.html",
+        "app/runtime/adapters/simplecpp-webview.js",
+        "app/runtime/adapters/simplecpp-webview.js",
+        "app/runtime/descriptivejs/runtime.js",
+        "app/runtime/descriptivejs/runtime.js",
+        "app/ui/main/component.classic.js",
+        "app/ui/main/component.classic.js",
+        "app/ui/main/component.js",
+        "app/ui/main/component.js",
+        "app/ui/main/styles.css",
+        "app/ui/main/styles.css",
+        "app/ui/main/ui.ir.js",
+        "app/ui/main/ui.ir.js",
+        "app/ui/main/ui.ir.json",
+        "app/ui/main/ui.ir.json",
+        "app/ui/main/ui.manifest.json",
+        "app/ui/main/ui.manifest.json",
+        "app/webview-bridge.js",
+        "app/webview-bridge.js",
+        "host/main.phs",
+        "host/prism.json"
+    ]
+}

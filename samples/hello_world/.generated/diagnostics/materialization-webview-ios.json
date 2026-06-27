@@ -1,0 +1,8 @@
+{
+    "ok": true,
+    "target": "webview-ios",
+    "generatedFiles": 28,
+    "overwrittenFiles": [
+        "app/index.html"
+    ]
+}

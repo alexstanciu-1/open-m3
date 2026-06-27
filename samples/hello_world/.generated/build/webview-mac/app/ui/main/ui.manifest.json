@@ -1,0 +1,10 @@
+{
+    "ui": "main",
+    "target": "webview-mac",
+    "materializer": "materializers/materialize.php",
+    "template": "web_app_basic",
+    "runtime": "descriptivejs-v1-shell",
+    "source": "src/ui/main/ui.json",
+    "artifacts": [],
+    "diagnostics": []
+}

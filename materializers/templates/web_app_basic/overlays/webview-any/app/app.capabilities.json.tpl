@@ -1,0 +1,1 @@
+{{ app_capabilities_json }}

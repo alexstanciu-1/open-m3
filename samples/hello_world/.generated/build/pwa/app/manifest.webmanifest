@@ -1,0 +1,10 @@
+{
+  "name": "Hello World Descriptive App",
+  "short_name": "Hello World",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f7faf9",
+  "theme_color": "#20535c",
+  "description": "First Descriptive Programming UI sample."
+}
